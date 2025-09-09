@@ -17,6 +17,10 @@ on:
         description: 'Google service account email'
         required: true
         type: string
+      wif_provider:
+        description: 'Workload Identity Federation provider'
+        required: true
+        type: string
       max_issues_per_run:
         description: 'Maximum number of issues to create per run'
         required: false
@@ -49,20 +53,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
           service_account: ${{ inputs.google_service_account }}
-          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          workload_identity_provider: ${{ inputs.wif_provider }}
           
       - name: Setup Google Cloud SDK
         uses: google-github-actions/setup-gcloud@v2

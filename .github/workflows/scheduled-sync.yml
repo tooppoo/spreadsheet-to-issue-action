@@ -19,6 +19,7 @@ jobs:
       config_path: '.github/spreadsheet-sync-config.json'
       sync_state_path: '.github/sync-state.json'
       google_service_account: ${{ vars.GOOGLE_SERVICE_ACCOUNT_EMAIL }}
+      wif_provider: ${{ vars.WIF_PROVIDER }}
       max_issues_per_run: 50
       rate_limit_delay: 0.33  # 3 requests per second as specified
       dry_run: ${{ github.event.inputs.dry_run == 'true' }}

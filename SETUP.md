@@ -42,6 +42,7 @@ This action provides reusable workflows to sync Google Spreadsheet responses to 
 Set up these repository variables:
 - `GOOGLE_SERVICE_ACCOUNT_EMAIL`: Your Google service account email
 - `WIF_PROVIDER`: Workload Identity Federation provider (used internally by the workflow for OIDC authentication)
+  Format: `projects/<project-number>/locations/global/workloadIdentityPools/<pool-id>/providers/<provider-id>`
 
 Set up these repository secrets:
 - `GITHUB_TOKEN`: Automatically provided by GitHub Actions
@@ -50,6 +51,7 @@ Set up these repository secrets:
 
 Use the following syntax in your templates:
 - `{{ row.A }}`, `{{ row.B }}`, etc. for specific columns
+- `{{ row_number }}` for the spreadsheet row number
 - `{{ row | json }}` for the entire row as JSON
 
 ## Usage
@@ -84,6 +86,7 @@ jobs:
     with:
       config_path: '.github/my-config.json'
       google_service_account: ${{ vars.GOOGLE_SERVICE_ACCOUNT_EMAIL }}
+      wif_provider: ${{ vars.WIF_PROVIDER }}
     secrets:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
@@ -95,6 +98,7 @@ jobs:
 | `config_path` | Path to configuration file | `.github/spreadsheet-sync-config.json` | No |
 | `sync_state_path` | Path to sync state file | `.github/sync-state.json` | No |
 | `google_service_account` | Google service account email | - | Yes |
+| `wif_provider` | Workload Identity Federation provider | - | Yes |
 | `max_issues_per_run` | Max issues to create per run | 50 | No |
 | `rate_limit_delay` | Delay between API calls (seconds) | 0.33 | No |
 | `dry_run` | Run without creating issues | false | No |
