@@ -31,7 +31,7 @@ This action provides reusable workflows to sync Google Spreadsheet responses to 
   "spreadsheet_id": "your-spreadsheet-id",
   "sheet_name": "Sheet1",
   "title_template": "[{{ row.A }}] {{ row.B }}",
-  "body_template": "Request: {{ row.A }}\\nDetails: {{ row.C }}",
+  "body_template": "## Details\n\n**Request from:** {{ row.A }}\n**Subject:** {{ row.B }}\n**Description:** {{ row.C }}\n\n---\n\n_Auto-generated from spreadsheet row {{ row_number }}_",
   "labels": ["spreadsheet-sync", "auto-created"],
   "repository": "owner/repo-name"
 }
@@ -41,7 +41,7 @@ This action provides reusable workflows to sync Google Spreadsheet responses to 
 
 Set up these repository variables:
 - `GOOGLE_SERVICE_ACCOUNT_EMAIL`: Your Google service account email
-- `WIF_PROVIDER`: Workload Identity Federation provider
+- `WIF_PROVIDER`: Workload Identity Federation provider (used internally by the workflow for OIDC authentication)
 
 Set up these repository secrets:
 - `GITHUB_TOKEN`: Automatically provided by GitHub Actions
@@ -83,7 +83,7 @@ jobs:
     uses: your-org/spreadsheet-to-issue-action/.github/workflows/sync-spreadsheet-to-issues.yml@main
     with:
       config_path: '.github/my-config.json'
-      google_service_account: ${{ vars.MY_SERVICE_ACCOUNT }}
+      google_service_account: ${{ vars.GOOGLE_SERVICE_ACCOUNT_EMAIL }}
     secrets:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
