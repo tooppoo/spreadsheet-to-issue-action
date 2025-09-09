@@ -1,0 +1,8 @@
+{
+  "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
+  "sheet_name": "Sheet1",
+  "title_template": "[{{ row.A }}] {{ row.B }}",
+  "body_template": "## Details\n\n**Request from:** {{ row.A }}\n**Subject:** {{ row.B }}\n**Description:** {{ row.C }}\n\n---\n\n_Auto-generated from spreadsheet row {{ row_number }}_",
+  "labels": ["spreadsheet-sync", "auto-created"],
+  "repository": "owner/repo-name"
+}

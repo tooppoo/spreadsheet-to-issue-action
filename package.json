@@ -1,0 +1,18 @@
+{
+  "name": "spreadsheet-to-issue-action",
+  "version": "1.0.0",
+  "description": "GitHub Action to sync Google Sheets responses to GitHub Issues",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "github-action",
+    "google-sheets",
+    "automation"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {}
+}

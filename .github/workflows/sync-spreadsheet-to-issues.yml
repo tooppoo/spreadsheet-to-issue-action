@@ -1,0 +1,214 @@
+name: Sync Spreadsheet to Issues
+
+on:
+  workflow_call:
+    inputs:
+      config_path:
+        description: 'Path to configuration file'
+        required: false
+        default: '.github/spreadsheet-sync-config.json'
+        type: string
+      sync_state_path:
+        description: 'Path to sync state file'
+        required: false
+        default: '.github/sync-state.json'
+        type: string
+      google_service_account:
+        description: 'Google service account email'
+        required: true
+        type: string
+      max_issues_per_run:
+        description: 'Maximum number of issues to create per run'
+        required: false
+        default: 50
+        type: number
+      rate_limit_delay:
+        description: 'Delay between GitHub API calls (seconds)'
+        required: false
+        default: 0.33
+        type: number
+      dry_run:
+        description: 'Run in dry-run mode (no actual issues created)'
+        required: false
+        default: false
+        type: boolean
+    secrets:
+      GITHUB_TOKEN:
+        description: 'GitHub token for creating issues'
+        required: true
+
+permissions:
+  contents: read
+  issues: write
+  id-token: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          service_account: ${{ inputs.google_service_account }}
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          
+      - name: Setup Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Load configuration
+        id: config
+        run: |
+          if [ -f "${{ inputs.config_path }}" ]; then
+            echo "config_exists=true" >> $GITHUB_OUTPUT
+            CONFIG=$(cat "${{ inputs.config_path }}")
+            echo "spreadsheet_id=$(echo $CONFIG | jq -r '.spreadsheet_id')" >> $GITHUB_OUTPUT
+            echo "sheet_name=$(echo $CONFIG | jq -r '.sheet_name // "Sheet1"')" >> $GITHUB_OUTPUT
+            echo "title_template=$(echo $CONFIG | jq -r '.title_template // "[{{ row.A }}] {{ row.B }}"')" >> $GITHUB_OUTPUT
+            echo "body_template=$(echo $CONFIG | jq -r '.body_template // "{{ row | json }}"')" >> $GITHUB_OUTPUT
+            echo "labels=$(echo $CONFIG | jq -c '.labels // []')" >> $GITHUB_OUTPUT
+            echo "repository=$(echo $CONFIG | jq -r '.repository // env.GITHUB_REPOSITORY')" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Configuration file not found: ${{ inputs.config_path }}"
+            exit 1
+          fi
+
+      - name: Load sync state
+        id: state
+        run: |
+          if [ -f "${{ inputs.sync_state_path }}" ]; then
+            LAST_ROW=$(cat "${{ inputs.sync_state_path }}" | jq -r '.last_processed_row // 1')
+          else
+            LAST_ROW=1
+            echo '{"last_processed_row": 1}' > "${{ inputs.sync_state_path }}"
+          fi
+          echo "last_row=${LAST_ROW}" >> $GITHUB_OUTPUT
+
+      - name: Fetch new spreadsheet data
+        id: fetch
+        run: |
+          # Use Google Sheets API to fetch new rows
+          SPREADSHEET_ID="${{ steps.config.outputs.spreadsheet_id }}"
+          SHEET_NAME="${{ steps.config.outputs.sheet_name }}"
+          START_ROW=$(($(( ${{ steps.state.outputs.last_row }} )) + 1))
+          
+          # Calculate end row based on max_issues_per_run
+          END_ROW=$((START_ROW + ${{ inputs.max_issues_per_run }} - 1))
+          
+          RANGE="${SHEET_NAME}!A${START_ROW}:Z${END_ROW}"
+          
+          echo "Fetching range: ${RANGE}"
+          
+          # Fetch data using gcloud
+          RESPONSE=$(gcloud sheets spreadsheets values get \
+            --spreadsheet-id="${SPREADSHEET_ID}" \
+            --range="${RANGE}" \
+            --format="json" \
+            --value-render-option=UNFORMATTED_VALUE \
+            --date-time-render-option=FORMATTED_STRING 2>/dev/null || echo '{"values": []}')
+          
+          echo "response=${RESPONSE}" >> $GITHUB_OUTPUT
+          
+          # Count new rows
+          NEW_ROWS=$(echo "${RESPONSE}" | jq '.values | length')
+          echo "new_rows=${NEW_ROWS}" >> $GITHUB_OUTPUT
+          echo "start_row=${START_ROW}" >> $GITHUB_OUTPUT
+
+      - name: Process and create issues
+        if: steps.fetch.outputs.new_rows > 0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NEW_ROWS='${{ steps.fetch.outputs.response }}'
+          START_ROW=${{ steps.fetch.outputs.start_row }}
+          TITLE_TEMPLATE='${{ steps.config.outputs.title_template }}'
+          BODY_TEMPLATE='${{ steps.config.outputs.body_template }}'
+          LABELS='${{ steps.config.outputs.labels }}'
+          REPOSITORY='${{ steps.config.outputs.repository }}'
+          DRY_RUN='${{ inputs.dry_run }}'
+          RATE_LIMIT_DELAY='${{ inputs.rate_limit_delay }}'
+          
+          echo "Processing $(echo ${NEW_ROWS} | jq '.values | length') new rows..."
+          
+          ROW_INDEX=0
+          echo ${NEW_ROWS} | jq -c '.values[]?' | while read -r row; do
+            CURRENT_ROW=$((START_ROW + ROW_INDEX))
+            
+            # Convert row array to object with column letters
+            ROW_OBJECT=$(echo ${row} | jq -r '. as $arr | reduce range(length) as $i ({}; .[(97 + $i | ascii_downcase)] = $arr[$i])')
+            
+            # Process title template
+            TITLE=$(echo "${TITLE_TEMPLATE}" | envsubst)
+            # Simple template replacement (this would need more sophisticated templating in real implementation)
+            TITLE=$(echo "${ROW_OBJECT}" | jq -r --arg template "${TITLE_TEMPLATE}" '
+              . as $row | $template 
+              | gsub("\\{\\{ row\\.([A-Z]) \\}\\}"; $row[ascii_downcase])
+              | gsub("\\{\\{ row \\| json \\}\\}"; ($row | tostring))
+            ')
+            
+            # Process body template
+            BODY=$(echo "${ROW_OBJECT}" | jq -r --arg template "${BODY_TEMPLATE}" '
+              . as $row | $template 
+              | gsub("\\{\\{ row\\.([A-Z]) \\}\\}"; $row[ascii_downcase])
+              | gsub("\\{\\{ row \\| json \\}\\}"; ($row | tostring))
+            ')
+            
+            # Escape mentions in title and body for security
+            TITLE=$(echo "${TITLE}" | sed 's/@/＠/g')
+            BODY=$(echo "${BODY}" | sed 's/@/＠/g')
+            
+            echo "Row ${CURRENT_ROW}: ${TITLE}"
+            
+            if [ "${DRY_RUN}" = "true" ]; then
+              echo "🔍 [DRY RUN] Would create issue:"
+              echo "  Title: ${TITLE}"
+              echo "  Body: ${BODY}"
+              echo "  Labels: ${LABELS}"
+            else
+              # Create GitHub issue with rate limiting
+              gh issue create \
+                --repo "${REPOSITORY}" \
+                --title "${TITLE}" \
+                --body "${BODY}" \
+                --label "$(echo ${LABELS} | jq -r '. | join(",")')" \
+                || echo "❌ Failed to create issue for row ${CURRENT_ROW}"
+              
+              # Rate limiting
+              sleep "${RATE_LIMIT_DELAY}"
+            fi
+            
+            # Update last processed row
+            ROW_INDEX=$((ROW_INDEX + 1))
+            echo "{\"last_processed_row\": ${CURRENT_ROW}}" > "${{ inputs.sync_state_path }}"
+          done
+
+      - name: Commit sync state
+        if: steps.fetch.outputs.new_rows > 0 && inputs.dry_run == false
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add "${{ inputs.sync_state_path }}"
+          git commit -m "Update sync state after processing spreadsheet rows" || echo "No changes to commit"
+          git push || echo "No changes to push"
+
+      - name: Summary
+        run: |
+          if [ "${{ steps.fetch.outputs.new_rows }}" -gt "0" ]; then
+            echo "✅ Processed ${{ steps.fetch.outputs.new_rows }} new rows from spreadsheet"
+            if [ "${{ inputs.dry_run }}" = "true" ]; then
+              echo "🔍 Running in dry-run mode - no issues were actually created"
+            fi
+          else
+            echo "ℹ️ No new rows found in spreadsheet"
+          fi
