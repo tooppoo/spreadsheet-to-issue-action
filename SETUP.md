@@ -41,7 +41,7 @@ This action provides reusable workflows to sync Google Spreadsheet responses to 
 
 Set up these repository variables:
 - `GOOGLE_SERVICE_ACCOUNT_EMAIL`: Your Google service account email
-- `WIF_PROVIDER`: Workload Identity Federation provider (used internally by the workflow for OIDC authentication)
+- `WIF_PROVIDER`: The resource name of your Workload Identity Pool Provider, required for OIDC authentication with Google Cloud.
   Format: `projects/<project-number>/locations/global/workloadIdentityPools/<pool-id>/providers/<provider-id>`
 
 The workflow uses the following repository secret:
@@ -82,6 +82,9 @@ on:
 
 jobs:
   sync:
+    permissions:
+      issues: write
+      contents: write
     uses: your-org/spreadsheet-to-issue-action/.github/workflows/sync-spreadsheet-to-issues.yml@main
     with:
       config_path: '.github/my-config.json'
