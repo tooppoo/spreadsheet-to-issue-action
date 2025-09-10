@@ -136,28 +136,43 @@ jobs:
           
           echo "Processing $(echo ${NEW_ROWS} | jq '.values | length') new rows..."
           
-          ROW_INDEX=0
-          echo ${NEW_ROWS} | jq -c '.values[]?' | while read -r row; do
-            CURRENT_ROW=$((START_ROW + ROW_INDEX))
+          # Process each row
+          LAST_PROCESSED_ROW=${START_ROW}
+          ROW_COUNT=$(echo ${NEW_ROWS} | jq '.values | length')
+          for i in $(seq 0 $((ROW_COUNT - 1))); do
+            CURRENT_ROW=$((START_ROW + i))
             
-            # Convert row array to object with column letters
-            ROW_OBJECT=$(echo ${row} | jq -r '. as $arr | reduce range(length) as $i ({}; .[(97 + $i | ascii_downcase)] = $arr[$i])')
+            # Extract row data
+            ROW_DATA=$(echo ${NEW_ROWS} | jq -c ".values[${i}]")
             
-            # Process title template
-            TITLE=$(echo "${TITLE_TEMPLATE}" | envsubst)
-            # Simple template replacement (this would need more sophisticated templating in real implementation)
-            TITLE=$(echo "${ROW_OBJECT}" | jq -r --arg template "${TITLE_TEMPLATE}" '
-              . as $row | $template 
-              | gsub("\\{\\{ row\\.([A-Z]) \\}\\}"; $row[ascii_downcase])
-              | gsub("\\{\\{ row \\| json \\}\\}"; ($row | tostring))
+            # Convert row array to object with column letters (a, b, c, etc.)
+            ROW_OBJECT=$(echo ${ROW_DATA} | jq -r '
+              . as $arr | 
+              reduce range(length) as $i ({}; 
+                .[["a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z"][$i]] = $arr[$i]
+              )
             ')
             
-            # Process body template
-            BODY=$(echo "${ROW_OBJECT}" | jq -r --arg template "${BODY_TEMPLATE}" '
-              . as $row | $template 
-              | gsub("\\{\\{ row\\.([A-Z]) \\}\\}"; $row[ascii_downcase])
-              | gsub("\\{\\{ row \\| json \\}\\}"; ($row | tostring))
-            ')
+            # Process templates using simple substitution
+            TITLE="${TITLE_TEMPLATE}"
+            BODY="${BODY_TEMPLATE}"
+            
+            # Replace column references (case insensitive)
+            for col in a b c d e f g h i j k l m n o p q r s t u v w x y z; do
+              COL_UPPER=$(echo "$col" | tr '[:lower:]' '[:upper:]')
+              COL_VALUE=$(echo "${ROW_OBJECT}" | jq -r --arg col "$col" '.[$col] // ""')
+              TITLE=$(echo "${TITLE}" | sed "s/{{ row\.${COL_UPPER} }}/${COL_VALUE}/g")
+              BODY=$(echo "${BODY}" | sed "s/{{ row\.${COL_UPPER} }}/${COL_VALUE}/g")
+            done
+            
+            # Replace row number
+            TITLE=$(echo "${TITLE}" | sed "s/{{ row_number }}/${CURRENT_ROW}/g")
+            BODY=$(echo "${BODY}" | sed "s/{{ row_number }}/${CURRENT_ROW}/g")
+            
+            # Replace full row JSON
+            ROW_JSON=$(echo "${ROW_OBJECT}" | jq -c .)
+            TITLE=$(echo "${TITLE}" | sed "s/{{ row | json }}/${ROW_JSON}/g")
+            BODY=$(echo "${BODY}" | sed "s/{{ row | json }}/${ROW_JSON}/g")
             
             # Escape mentions in title and body for security
             TITLE=$(echo "${TITLE}" | sed 's/@/＠/g')
@@ -183,10 +198,12 @@ jobs:
               sleep "${RATE_LIMIT_DELAY}"
             fi
             
-            # Update last processed row
-            ROW_INDEX=$((ROW_INDEX + 1))
-            echo "{\"last_processed_row\": ${CURRENT_ROW}}" > "${{ inputs.sync_state_path }}"
+            # Track last processed row
+            LAST_PROCESSED_ROW=${CURRENT_ROW}
           done
+          
+          # Update sync state file with the last processed row
+          echo "{\"last_processed_row\": ${LAST_PROCESSED_ROW}}" > "${{ inputs.sync_state_path }}"
 
       - name: Commit sync state
         if: steps.fetch.outputs.new_rows > 0 && inputs.dry_run == false

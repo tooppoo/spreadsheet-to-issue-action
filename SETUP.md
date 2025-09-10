@@ -44,8 +44,8 @@ Set up these repository variables:
 - `WIF_PROVIDER`: Workload Identity Federation provider (used internally by the workflow for OIDC authentication)
   Format: `projects/<project-number>/locations/global/workloadIdentityPools/<pool-id>/providers/<provider-id>`
 
-Set up these repository secrets:
-- `GITHUB_TOKEN`: Automatically provided by GitHub Actions
+The workflow uses the following repository secret:
+- `GITHUB_TOKEN`: Automatically provided by GitHub Actions (no manual setup needed)
 
 ### 4. Template Syntax
 
