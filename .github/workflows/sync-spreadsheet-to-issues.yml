@@ -42,7 +42,8 @@ on:
         required: true
 
 permissions:
-  contents: read
+  # Requires writing the sync state file back to the repo
+  contents: write
   issues: write
   id-token: write
 

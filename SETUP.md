@@ -47,6 +47,19 @@ Set up these repository variables:
 The workflow uses the following repository secret:
 - `GITHUB_TOKEN`: Automatically provided by GitHub Actions (no manual setup needed)
 
+### 3.1 Required GITHUB_TOKEN permissions
+
+This workflow writes a sync state file (e.g. `.github/sync-state.json`) back to the repository so it can resume from the last processed row. Grant the workflow the minimum required permissions:
+
+```yaml
+permissions:
+  contents: write
+  issues: write
+  id-token: write
+```
+
+When calling this workflow from another repository, set these permissions in the calling job. For the included scheduled workflow in this repo, these permissions are already set.
+
 ### 4. Template Syntax
 
 Use the following syntax in your templates:
@@ -85,6 +98,7 @@ jobs:
     permissions:
       issues: write
       contents: write
+      id-token: write
     uses: your-org/spreadsheet-to-issue-action/.github/workflows/sync-spreadsheet-to-issues.yml@main
     with:
       config_path: '.github/my-config.json'

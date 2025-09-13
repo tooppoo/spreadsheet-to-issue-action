@@ -14,6 +14,10 @@ on:
 
 jobs:
   sync:
+    permissions:
+      contents: write
+      issues: write
+      id-token: write
     uses: ./.github/workflows/sync-spreadsheet-to-issues.yml
     with:
       config_path: '.github/spreadsheet-sync-config.json'
