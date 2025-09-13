@@ -97,7 +97,7 @@ jobs:
           # Use Google Sheets API to fetch new rows
           SPREADSHEET_ID="${{ steps.config.outputs.spreadsheet_id }}"
           SHEET_NAME="${{ steps.config.outputs.sheet_name }}"
-          START_ROW=$(($(( ${{ steps.state.outputs.last_row }} )) + 1))
+          START_ROW=$((${{ steps.state.outputs.last_row }} + 1))
           
           # Calculate end row based on max_issues_per_run
           END_ROW=$((START_ROW + ${{ inputs.max_issues_per_run }} - 1))
@@ -150,10 +150,12 @@ jobs:
             ROW_DATA=$(echo ${NEW_ROWS} | jq -c ".values[${i}]")
             
             # Convert row array to object with column letters (a, b, c, etc.)
+            # Use a readable mapping from an alphabet string to avoid long inline arrays
             ROW_OBJECT=$(echo ${ROW_DATA} | jq -r '
-              . as $arr | 
-              reduce range(length) as $i ({}; 
-                .[["a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z"][$i]] = $arr[$i]
+              . as $arr |
+              reduce range(length) as $i (
+                {};
+                .[("abcdefghijklmnopqrstuvwxyz" | split(""))[$i]] = $arr[$i]
               )
             ')
             
@@ -184,6 +186,7 @@ jobs:
             BODY=$(echo "${BODY}" | sed "s#{{ row | json }}#${ESCAPED_ROW_JSON}#g")
             
             # Escape mentions in title and body for security
+            # Replace all '@' with full-width '＠' to prevent unwanted GitHub mentions
             TITLE=$(echo "${TITLE}" | sed 's/@/＠/g')
             BODY=$(echo "${BODY}" | sed 's/@/＠/g')
             
@@ -229,15 +232,17 @@ jobs:
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           
-          # Check if there are changes to commit
-          if git diff --staged --quiet "${{ inputs.sync_state_path }}"; then
-            git add "${{ inputs.sync_state_path }}"
-          fi
+          # Always add the sync state file before checking for staged changes
+          git add "${{ inputs.sync_state_path }}" || true
           
           if ! git diff --staged --quiet; then
             git commit -m "Update sync state after processing spreadsheet rows"
-            # Push to the current branch (handling detached HEAD)
-            git push origin HEAD:${{ github.ref_name }} || {
+            # Push to the current branch; handle workflow_call contexts without a clean ref_name
+            TARGET_REF="${GITHUB_REF_NAME}"
+            if [ -z "$TARGET_REF" ] || [ "$TARGET_REF" = "HEAD" ]; then
+              TARGET_REF=$(git rev-parse --abbrev-ref HEAD)
+            fi
+            git push origin HEAD:"${TARGET_REF}" || {
               echo "❌ Failed to push sync state changes"
               exit 1
             }
