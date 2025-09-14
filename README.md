@@ -69,7 +69,7 @@ jobs:
 
 - Google Cloudでサービスアカウントを作成し、Google Sheets API を有効化。
 - 対象スプレッドシートをサービスアカウントのメールアドレスに共有（閲覧権限以上）。
-- Workload Identity Federation のプロバイダを作成し、GitHubリポジトリ/Orgと関連付け。
+- Workload Identity Federation のプロバイダを作成し、GitHubリポジトリ/Orgと関連付け。（設定方法の詳細は [google-github-actions/auth のドキュメント](https://github.com/google-github-actions/auth#setting-up-workload-identity-federation) を参照）
 - 呼び出し側リポジトリの Actions 変数（`Settings > Secrets and variables > Actions > Variables`）に以下を登録、または `with:` で直接値を渡す。
   - `GOOGLE_SERVICE_ACCOUNT_EMAIL`: サービスアカウントのメール
   - `WIF_PROVIDER`: プロバイダリソース名（例: `projects/…/locations/global/workloadIdentityPools/…/providers/…`）
