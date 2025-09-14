@@ -61,6 +61,7 @@ jobs:
 - `title_template` / `body_template`: `{{ row.A }}` のように列参照、`{{ row_number }}`, `{{ row | json }}` が使用可能。ワークフロー内で `@` は全角 `＠` に置換されます（不要メンション防止）。
 - `labels`: 付与するIssueラベル配列。
 - `repository`: 既定は実行中のリポジトリ。別リポジトリにIssueを作成したい場合に指定します。
+  - **注意:** 別リポジトリにIssueを作成する場合、呼び出し側ワークフローで渡すトークンには、そのリポジトリへの`issues: write`権限が必要です。既定の`GITHUB_TOKEN`は実行中のリポジトリにしか権限がないため、代わりにPersonal Access Token (PAT)などを`secrets`に設定して渡す必要があります。
 
 ## 3. Google 認証（Workload Identity Federation）
 
