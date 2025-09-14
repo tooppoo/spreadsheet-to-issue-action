@@ -80,16 +80,18 @@ jobs:
 - 実行後は最後に処理した行番号を `.github/sync-state.json` に書き戻し、同ブランチへコミット＆プッシュします。
 - `max_issues_per_run` と `rate_limit_delay` で作成件数とレートを制御できます。`dry_run: true` で作成せずログのみ出力します。
 
-## 5. 入力パラメータ（抜粋）
+## 5. 入力パラメータ
 
-- `config_path`(string, 既定: `.github/spreadsheet-sync-config.json`)
-- `sync_state_path`(string, 既定: `.github/sync-state.json`)
-- `google_service_account`(string, 必須)
-- `wif_provider`(string, 必須)
-- `max_issues_per_run`(number, 既定: 50)
-- `rate_limit_delay`(number, 既定: 0.33 秒)
-- `dry_run`(boolean, 既定: false)
-- `secrets.GITHUB_TOKEN`(必須)
+| 入力パラメータ | 型 | 説明 | 既定値 | 必須 |
+|---|---|---|---|---|
+| `config_path` | string | 設定ファイルへのパス | `.github/spreadsheet-sync-config.json` | No |
+| `sync_state_path` | string | 同期状態ファイルへのパス | `.github/sync-state.json` | No |
+| `google_service_account` | string | Googleサービスアカウントのメールアドレス | - | Yes |
+| `wif_provider` | string | Workload Identity Federationプロバイダのリソース名 | - | Yes |
+| `max_issues_per_run` | number | 1回の実行で作成するIssueの最大数 | `50` | No |
+| `rate_limit_delay` | number | API呼び出し間の遅延（秒） | `0.33` | No |
+| `dry_run` | boolean | Issueを作成せずにログのみ出力する | `false` | No |
+| `secrets.GITHUB_TOKEN` | secret | GitHub API認証用のトークン | - | Yes |
 
 ## 6. バージョン固定の推奨
 
