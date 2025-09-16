@@ -1,0 +1,10 @@
+{
+  "spreadsheet_id": "YOUR_SPREADSHEET_ID_HERE",
+  "sheet_name": "Sheet1",
+  "sync_status_column": "Z",
+  "sync_status_value": "連携済み",
+  "title_template": "[{{ row.A }}] {{ row.B }}",
+  "body_template": "{{ row | json }}",
+  "labels": ["from-spreadsheet"],
+  "repository": "your-repo/name"
+}
