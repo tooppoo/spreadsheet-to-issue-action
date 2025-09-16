@@ -8,10 +8,10 @@ on:
         required: false
         default: '.github/spreadsheet-sync-config.json'
         type: string
-      sync_state_path:
-        description: 'Path to sync state file'
+      sync_status_column:
+        description: 'Column to mark sync status (e.g., Z)'
         required: false
-        default: '.github/sync-state.json'
+        default: 'Z'
         type: string
       google_service_account:
         description: 'Google service account email'
@@ -42,8 +42,7 @@ on:
         required: true
 
 permissions:
-  # Requires writing the sync state file back to the repo
-  contents: write
+  # Requires creating issues and accessing Google Sheets
   issues: write
   id-token: write
 
@@ -71,6 +70,8 @@ jobs:
             CONFIG=$(cat "${{ inputs.config_path }}")
             echo "spreadsheet_id=$(echo $CONFIG | jq -r '.spreadsheet_id')" >> $GITHUB_OUTPUT
             echo "sheet_name=$(echo $CONFIG | jq -r '.sheet_name // "Sheet1"')" >> $GITHUB_OUTPUT
+            echo "sync_status_column=$(echo $CONFIG | jq -r --arg col "${{ inputs.sync_status_column }}" '.sync_status_column // $col')" >> $GITHUB_OUTPUT
+            echo "sync_status_value=$(echo $CONFIG | jq -r '.sync_status_value // "連携済み"')" >> $GITHUB_OUTPUT
             echo "title_template=$(echo $CONFIG | jq -r '.title_template // "[{{ row.A }}] {{ row.B }}"')" >> $GITHUB_OUTPUT
             echo "body_template=$(echo $CONFIG | jq -r '.body_template // "{{ row | json }}"')" >> $GITHUB_OUTPUT
             echo "labels=$(echo $CONFIG | jq -c '.labels // []')" >> $GITHUB_OUTPUT
@@ -80,74 +81,78 @@ jobs:
             exit 1
           fi
 
-      - name: Load sync state
-        id: state
+      - name: Find unsynced rows
+        id: unsynced
         run: |
-          if [ -f "${{ inputs.sync_state_path }}" ]; then
-            LAST_ROW=$(cat "${{ inputs.sync_state_path }}" | jq -r '.last_processed_row // 1')
-          else
-            LAST_ROW=1
-            echo '{"last_processed_row": 1}' > "${{ inputs.sync_state_path }}"
-          fi
-          echo "last_row=${LAST_ROW}" >> $GITHUB_OUTPUT
-
-      - name: Fetch new spreadsheet data
-        id: fetch
-        run: |
-          # Use Google Sheets API to fetch new rows
+          # Fetch all data to find rows without sync status
           SPREADSHEET_ID="${{ steps.config.outputs.spreadsheet_id }}"
           SHEET_NAME="${{ steps.config.outputs.sheet_name }}"
-          START_ROW=$((${{ steps.state.outputs.last_row }} + 1))
-          
-          # Calculate end row based on max_issues_per_run
-          END_ROW=$((START_ROW + ${{ inputs.max_issues_per_run }} - 1))
-          
-          RANGE="${SHEET_NAME}!A${START_ROW}:Z${END_ROW}"
-          
-          echo "Fetching range: ${RANGE}"
-          
+          SYNC_COLUMN="${{ steps.config.outputs.sync_status_column }}"
+          SYNC_VALUE="${{ steps.config.outputs.sync_status_value }}"
+
           # Get access token for Google Sheets API
           ACCESS_TOKEN=$(gcloud auth print-access-token)
-          
-          # Fetch data using Google Sheets API
+
+          # Fetch all data including sync status column
+          RANGE="${SHEET_NAME}!A:${SYNC_COLUMN}"
           RESPONSE=$(curl -s "https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${RANGE}?valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING" \
-            -H "Authorization: Bearer ${ACCESS_TOKEN}" 2>/tmp/gcloud_error.log) || { 
-            echo "❌ Google Sheets API error:"; 
-            cat /tmp/gcloud_error.log; 
-            RESPONSE='{"values": []}'; 
+            -H "Authorization: Bearer ${ACCESS_TOKEN}" 2>/tmp/gcloud_error.log) || {
+            echo "❌ Google Sheets API error:";
+            cat /tmp/gcloud_error.log;
+            RESPONSE='{"values": []}';
           }
-          
+
           echo "response=${RESPONSE}" >> $GITHUB_OUTPUT
-          
-          # Count new rows
-          NEW_ROWS=$(echo "${RESPONSE}" | jq '.values | length')
-          echo "new_rows=${NEW_ROWS}" >> $GITHUB_OUTPUT
-          echo "start_row=${START_ROW}" >> $GITHUB_OUTPUT
+
+          # Find unsynced rows (rows without sync status value in sync column)
+          UNSYNCED_ROWS=$(echo "${RESPONSE}" | jq --arg sync_value "${SYNC_VALUE}" '
+            .values as $all_rows |
+            [
+              range(length) as $i |
+              $all_rows[$i] as $row |
+              if ($row | length) > 0 and (($row[-1] // "") != $sync_value) then
+                {
+                  "row_number": ($i + 1),
+                  "data": $row[0:-1]  # Exclude sync status column from data
+                }
+              else
+                empty
+              end
+            ] | .[0:${{ inputs.max_issues_per_run }}]
+          ')
+
+          echo "unsynced_rows=${UNSYNCED_ROWS}" >> $GITHUB_OUTPUT
+          echo "unsynced_count=$(echo "${UNSYNCED_ROWS}" | jq 'length')" >> $GITHUB_OUTPUT
 
       - name: Process and create issues
-        if: steps.fetch.outputs.new_rows > 0
+        if: steps.unsynced.outputs.unsynced_count > 0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          NEW_ROWS='${{ steps.fetch.outputs.response }}'
-          START_ROW=${{ steps.fetch.outputs.start_row }}
+          UNSYNCED_ROWS='${{ steps.unsynced.outputs.unsynced_rows }}'
+          SPREADSHEET_ID="${{ steps.config.outputs.spreadsheet_id }}"
+          SHEET_NAME="${{ steps.config.outputs.sheet_name }}"
+          SYNC_COLUMN="${{ steps.config.outputs.sync_status_column }}"
+          SYNC_VALUE="${{ steps.config.outputs.sync_status_value }}"
           TITLE_TEMPLATE='${{ steps.config.outputs.title_template }}'
           BODY_TEMPLATE='${{ steps.config.outputs.body_template }}'
           LABELS='${{ steps.config.outputs.labels }}'
           REPOSITORY='${{ steps.config.outputs.repository }}'
           DRY_RUN='${{ inputs.dry_run }}'
           RATE_LIMIT_DELAY='${{ inputs.rate_limit_delay }}'
-          
-          echo "Processing $(echo ${NEW_ROWS} | jq '.values | length') new rows..."
-          
-          # Process each row
-          LAST_PROCESSED_ROW=${START_ROW}
-          ROW_COUNT=$(echo ${NEW_ROWS} | jq '.values | length')
+
+          echo "Processing $(echo ${UNSYNCED_ROWS} | jq 'length') unsynced rows..."
+
+          # Get access token for Google Sheets API (for writing back sync status)
+          ACCESS_TOKEN=$(gcloud auth print-access-token)
+
+          # Process each unsynced row
+          ROW_COUNT=$(echo ${UNSYNCED_ROWS} | jq 'length')
           for i in $(seq 0 $((ROW_COUNT - 1))); do
-            CURRENT_ROW=$((START_ROW + i))
-            
             # Extract row data
-            ROW_DATA=$(echo ${NEW_ROWS} | jq -c ".values[${i}]")
+            ROW_ITEM=$(echo ${UNSYNCED_ROWS} | jq -c ".[$i]")
+            CURRENT_ROW=$(echo ${ROW_ITEM} | jq -r '.row_number')
+            ROW_DATA=$(echo ${ROW_ITEM} | jq -c '.data')
             
             # Convert row array to object with column letters (a, b, c, etc.)
             # Use a readable mapping from an alphabet string to avoid long inline arrays
@@ -206,57 +211,49 @@ jobs:
                   --title "${TITLE}" \
                   --body "${BODY}" \
                   --label "${LABELS_JOINED}" \
-                  || echo "❌ Failed to create issue for row ${CURRENT_ROW}"
+                  && ISSUE_CREATED=true \
+                  || { echo "❌ Failed to create issue for row ${CURRENT_ROW}"; ISSUE_CREATED=false; }
               else
                 gh issue create \
                   --repo "${REPOSITORY}" \
                   --title "${TITLE}" \
                   --body "${BODY}" \
-                  || echo "❌ Failed to create issue for row ${CURRENT_ROW}"
+                  && ISSUE_CREATED=true \
+                  || { echo "❌ Failed to create issue for row ${CURRENT_ROW}"; ISSUE_CREATED=false; }
               fi
-              
+
+              # Mark as synced in spreadsheet if issue was created successfully
+              if [ "$ISSUE_CREATED" = "true" ]; then
+                echo "✅ Created issue for row ${CURRENT_ROW}, marking as synced..."
+                # Update sync status in spreadsheet
+                RANGE="${SHEET_NAME}!${SYNC_COLUMN}${CURRENT_ROW}"
+                UPDATE_BODY=$(jq -n --arg value "${SYNC_VALUE}" '{
+                  "values": [[$value]]
+                }')
+
+                curl -s -X PUT \
+                  "https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${RANGE}?valueInputOption=RAW" \
+                  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+                  -H "Content-Type: application/json" \
+                  -d "${UPDATE_BODY}" \
+                  || echo "⚠️ Failed to update sync status for row ${CURRENT_ROW}"
+              fi
+
               # Rate limiting
               sleep "${RATE_LIMIT_DELAY}"
             fi
-            
-            # Track last processed row
-            LAST_PROCESSED_ROW=${CURRENT_ROW}
           done
-          
-          # Update sync state file with the last processed row
-          echo "{\"last_processed_row\": ${LAST_PROCESSED_ROW}}" > "${{ inputs.sync_state_path }}"
 
-      - name: Commit sync state
-        if: steps.fetch.outputs.new_rows > 0 && inputs.dry_run == false
-        run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          
-          # Always add the sync state file before checking for staged changes
-          git add "${{ inputs.sync_state_path }}" || true
-          
-          if ! git diff --staged --quiet; then
-            git commit -m "Update sync state after processing spreadsheet rows"
-            # Push to the current branch; handle workflow_call contexts without a clean ref_name
-            TARGET_REF="${GITHUB_REF_NAME}"
-            if [ -z "$TARGET_REF" ] || [ "$TARGET_REF" = "HEAD" ]; then
-              TARGET_REF=$(git rev-parse --abbrev-ref HEAD)
-            fi
-            git push origin HEAD:"${TARGET_REF}" || {
-              echo "❌ Failed to push sync state changes"
-              exit 1
-            }
-          else
-            echo "No changes to commit"
-          fi
 
       - name: Summary
         run: |
-          if [ "${{ steps.fetch.outputs.new_rows }}" -gt "0" ]; then
-            echo "✅ Processed ${{ steps.fetch.outputs.new_rows }} new rows from spreadsheet"
+          if [ "${{ steps.unsynced.outputs.unsynced_count }}" -gt "0" ]; then
+            echo "✅ Processed ${{ steps.unsynced.outputs.unsynced_count }} unsynced rows from spreadsheet"
             if [ "${{ inputs.dry_run }}" = "true" ]; then
               echo "🔍 Running in dry-run mode - no issues were actually created"
+            else
+              echo "📝 Sync status has been written back to the spreadsheet"
             fi
           else
-            echo "ℹ️ No new rows found in spreadsheet"
+            echo "ℹ️ No unsynced rows found in spreadsheet"
           fi

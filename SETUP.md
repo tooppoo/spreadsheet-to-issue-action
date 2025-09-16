@@ -9,7 +9,7 @@ This action provides reusable workflows to sync Google Spreadsheet responses to 
 - 📊 Configurable templates for issue titles and bodies
 - 🏷️ Automatic labeling
 - 🚦 Rate limiting (3 API calls per second)
-- 📝 State tracking to avoid duplicates
+- 📝 Spreadsheet-based sync tracking (writes "連携済み" to designated column)
 - 🧪 Dry-run mode for testing
 
 ## Setup
@@ -18,7 +18,7 @@ This action provides reusable workflows to sync Google Spreadsheet responses to 
 
 1. Create a Google Cloud project
 2. Enable the Google Sheets API
-3. Create a service account with read-only access to your spreadsheet
+3. Create a service account with read and write access to your spreadsheet
 4. Configure Workload Identity Federation for GitHub Actions
 
 ### 2. Repository Configuration
@@ -30,12 +30,16 @@ This action provides reusable workflows to sync Google Spreadsheet responses to 
 {
   "spreadsheet_id": "your-spreadsheet-id",
   "sheet_name": "Sheet1",
+  "sync_status_column": "Z",
+  "sync_status_value": "連携済み",
   "title_template": "[{{ row.A }}] {{ row.B }}",
   "body_template": "## Details\n\n**Request from:** {{ row.A }}\n**Subject:** {{ row.B }}\n**Description:** {{ row.C }}\n\n---\n\n_Auto-generated from spreadsheet row {{ row_number }}_",
   "labels": ["spreadsheet-sync", "auto-created"],
   "repository": "owner/repo-name"
 }
 ```
+
+**重要**: スプレッドシートには「連携状態」を示すカラム（この例では Z カラム）を用意する必要があります。このカラムに `sync_status_value` で指定した値（デフォルトは「連携済み」）が書き込まれることで、重複処理を防ぎます。
 
 ### 3. GitHub Secrets and Variables
 
@@ -49,11 +53,10 @@ The workflow uses the following repository secret:
 
 ### 3.1 Required GITHUB_TOKEN permissions
 
-This workflow writes a sync state file (e.g. `.github/sync-state.json`) back to the repository so it can resume from the last processed row. Grant the workflow the minimum required permissions:
+This workflow creates GitHub issues and needs access to Google Cloud for spreadsheet operations. Grant the workflow the minimum required permissions:
 
 ```yaml
 permissions:
-  contents: write
   issues: write
   id-token: write
 ```
@@ -97,11 +100,11 @@ jobs:
   sync:
     permissions:
       issues: write
-      contents: write
       id-token: write
     uses: your-org/spreadsheet-to-issue-action/.github/workflows/sync-spreadsheet-to-issues.yml@main
     with:
       config_path: '.github/my-config.json'
+      sync_status_column: 'Z'
       google_service_account: ${{ vars.GOOGLE_SERVICE_ACCOUNT_EMAIL }}
       wif_provider: ${{ vars.WIF_PROVIDER }}
     secrets:
@@ -113,7 +116,7 @@ jobs:
 | Input | Description | Default | Required |
 |-------|-------------|---------|----------|
 | `config_path` | Path to configuration file | `.github/spreadsheet-sync-config.json` | No |
-| `sync_state_path` | Path to sync state file | `.github/sync-state.json` | No |
+| `sync_status_column` | Column to mark sync status | `Z` | No |
 | `google_service_account` | Google service account email | - | Yes |
 | `wif_provider` | Workload Identity Federation provider | - | Yes |
 | `max_issues_per_run` | Max issues to create per run | 50 | No |
@@ -122,7 +125,7 @@ jobs:
 
 ## Security Considerations
 
-- Service account has read-only access to spreadsheets
+- Service account has read and write access to spreadsheets for sync status tracking
 - Mentions (@) are automatically escaped to prevent notifications
 - Rate limiting prevents API abuse
 - OIDC authentication eliminates need for service account keys

@@ -15,13 +15,12 @@ on:
 jobs:
   sync:
     permissions:
-      contents: write
       issues: write
       id-token: write
     uses: ./.github/workflows/sync-spreadsheet-to-issues.yml
     with:
       config_path: '.github/spreadsheet-sync-config.json'
-      sync_state_path: '.github/sync-state.json'
+      sync_status_column: 'Z'
       google_service_account: ${{ vars.GOOGLE_SERVICE_ACCOUNT_EMAIL }}
       wif_provider: ${{ vars.WIF_PROVIDER }}
       max_issues_per_run: 50
