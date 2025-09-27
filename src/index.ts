@@ -41,8 +41,11 @@ function safeGet(env: NodeJS.ProcessEnv, key: string): string;
 function safeGet<T>(env: NodeJS.ProcessEnv, key: string, def: T): T | string;
 function safeGet<T>(env: NodeJS.ProcessEnv, key: string, def?: T): string | T {
   const v = env[key];
-  if (v === undefined || v === "") return (def as any) ?? "";
+  if (v === undefined || v === "") {
+    return def === undefined ? "" : def;
+  }
   return v;
+}
 }
 
 // Parse the start reference of an A1 range (e.g. 'C5:F' -> { startColIndex: 2, startRowNumber: 5 })
