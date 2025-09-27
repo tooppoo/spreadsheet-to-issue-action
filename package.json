@@ -1,0 +1,28 @@
+{
+  "name": "spreadsheet-to-issue-action",
+  "version": "0.0.1",
+  "description": "GoogleスプレッドシートからGitHub Issueを自動作成するGitHub Action",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "lint": "eslint src --ext .ts",
+    "format": "prettier --write src"
+  },
+  "author": "tooppoo",
+  "license": "MIT",
+  "dependencies": {
+    "@actions/core": "^1.10.0",
+    "@actions/github": "^5.1.1",
+    "@googleapis/sheets": "^5.0.0",
+    "mustache": "^4.2.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "eslint": "^8.56.0",
+    "prettier": "^3.2.5"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

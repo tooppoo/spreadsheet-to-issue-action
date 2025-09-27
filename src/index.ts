@@ -1,0 +1,3 @@
+// メインロジック雛形
+console.log('spreadsheet-to-issue-action: start');
+// ...実装は後続で追加...
