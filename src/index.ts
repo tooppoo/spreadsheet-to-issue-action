@@ -60,7 +60,9 @@ function parseA1Start(a1: string): {
   // Match optional $ then letters, optional $ then digits
   const m = ref.match(/\$?([A-Za-z]+)\$?(\d+)?/);
   if (!m) {
-    return { startColIndex: 0, startRowNumber: 1 };
+    throw new Error(
+      `READ_RANGE must start with a column reference (e.g., 'A:Z', 'C5:F'). Given: '${a1}'`,
+    );
   }
   const letters = m[1];
   const digits = m[2] ? parseInt(m[2], 10) : 1;
