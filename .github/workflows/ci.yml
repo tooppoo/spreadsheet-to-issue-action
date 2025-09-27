@@ -3,7 +3,25 @@ name: CI
 on:
   push:
     branches: [main]
+    paths:
+      - "src/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "tsconfig.json"
+      - ".eslintrc.json"
+      - ".eslintignore"
+      - ".prettierignore"
   pull_request:
+    paths:
+      - "src/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "tsconfig.json"
+      - ".eslintrc.json"
+      - ".eslintignore"
+      - ".prettierignore"
 
 jobs:
   build-lint-format:
