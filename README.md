@@ -21,7 +21,7 @@ Googleスプレッドシートを読み取り、未連携行に対してGitHub I
   - `sync_column`: 連携済み判定/書き戻し列（例: `"E"`）
 - 任意（既定値）
   - `labels`（既定: 空文字。JSON配列 or カンマ区切り）
-  - `max_issues_per_run`（既定: 10）
+  - `max_issues_per_run`（既定: 10。0以下やNaNは「無制限」として扱われます）
   - `rate_limit_delay`（既定: 1000ms）
   - `read_range`（既定: `A:Z`）
   - `data_start_row`（既定: 2）

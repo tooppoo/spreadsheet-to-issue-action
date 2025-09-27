@@ -26,7 +26,7 @@ inputs:
     required: false
     default: ""
   max_issues_per_run:
-    description: "1回に作成する最大件数（上限なし）"
+    description: "1回に作成する最大件数（0以下やNaNは無制限として扱う）"
     required: false
     default: "10"
   rate_limit_delay:
