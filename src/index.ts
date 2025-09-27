@@ -10,13 +10,30 @@ function sleep(ms: number) {
   return new Promise((res) => setTimeout(res, ms));
 }
 
-function parseLabels(input: string | undefined): string[] | undefined {
+type LabelInput = string | { name: string; [k: string]: unknown };
+
+function isLabelObject(v: unknown): v is { name: string } {
+  return !!v && typeof v === "object" && typeof (v as { name?: unknown }).name === "string";
+}
+
+function parseLabels(
+  input: string | undefined,
+): LabelInput[] | undefined {
   if (!input) return undefined;
   const trimmed = input.trim();
   if (!trimmed) return undefined;
   try {
     const arr = JSON.parse(trimmed);
-    if (Array.isArray(arr)) return arr.map((s) => String(s));
+    if (Array.isArray(arr)) {
+      // Preserve label objects if provided; normalize strings
+      const out: LabelInput[] = [];
+      for (const v of arr) {
+        if (typeof v === "string") out.push(v);
+        else if (isLabelObject(v)) out.push({ name: v.name });
+        else out.push(String(v));
+      }
+      return out;
+    }
   } catch (_) {
     // fallthrough to CSV
   }
@@ -24,6 +41,13 @@ function parseLabels(input: string | undefined): string[] | undefined {
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
+}
+
+function normalizeLabels(labels: LabelInput[] | undefined): string[] | undefined {
+  if (!labels) return undefined;
+  const out: string[] = [];
+  for (const l of labels) out.push(typeof l === "string" ? l : l.name);
+  return out;
 }
 
 function colLetterToIndex(letter: string): number {
@@ -68,10 +92,25 @@ function parseA1Start(a1: string): {
   return { startColIndex: colLetterToIndex(letters), startRowNumber: digits };
 }
 
-async function main() {
-  core.info("spreadsheet-to-issue-action: start");
+type Config = {
+  accessToken: string;
+  spreadsheetId: string;
+  sheetName: string;
+  readRange: string;
+  dataStartRow: number;
+  truthyValues: string[];
+  titleTemplate: string;
+  bodyTemplate: string;
+  syncColumnLetter: string;
+  labels: LabelInput[] | undefined;
+  maxIssuesPerRun: number;
+  rateLimitDelay: number;
+  dryRun: boolean;
+  githubToken: string;
+  syncWriteBackValue: string;
+};
 
-  const env = process.env;
+function parseConfig(env: NodeJS.ProcessEnv): Config {
   const accessToken = env.GOOGLE_OAUTH_ACCESS_TOKEN || env.ACCESS_TOKEN || "";
   if (!accessToken) {
     throw new Error(
@@ -84,9 +123,7 @@ async function main() {
   const readRange = safeGet(env, "READ_RANGE", "A:Z");
   const dataStartRowInput = safeGet(env, "DATA_START_ROW", "2");
   let dataStartRow = parseInt(dataStartRowInput, 10);
-  if (Number.isNaN(dataStartRow)) {
-    dataStartRow = 2;
-  }
+  if (Number.isNaN(dataStartRow)) dataStartRow = 2;
   if (dataStartRow < 1) {
     throw new Error(
       `data_start_row must be a positive integer, but got ${dataStartRow}.`,
@@ -100,9 +137,7 @@ async function main() {
   let truthyValues: string[];
   try {
     const parsed = JSON.parse(truthyJson);
-    if (!Array.isArray(parsed)) {
-      throw new Error("Input is not a JSON array.");
-    }
+    if (!Array.isArray(parsed)) throw new Error("Input is not a JSON array.");
     truthyValues = parsed.map((s) => String(s));
   } catch (e) {
     throw new Error(
@@ -124,51 +159,59 @@ async function main() {
   const githubToken = safeGet(env, "GITHUB_TOKEN");
   const syncWriteBackValue = safeGet(env, "SYNC_WRITE_BACK_VALUE", "TRUE");
 
-  if (!githubToken) {
-    throw new Error("GITHUB_TOKEN is required");
-  }
-  if (!spreadsheetId || !sheetName) {
+  if (!githubToken) throw new Error("GITHUB_TOKEN is required");
+  if (!spreadsheetId || !sheetName)
     throw new Error("SPREADSHEET_ID and SHEET_NAME are required");
-  }
-  if (!titleTemplate || !bodyTemplate) {
+  if (!titleTemplate || !bodyTemplate)
     throw new Error("TITLE_TEMPLATE and BODY_TEMPLATE are required");
-  }
-  if (!syncColumnLetter) {
-    throw new Error("SYNC_COLUMN is required");
-  }
+  if (!syncColumnLetter) throw new Error("SYNC_COLUMN is required");
 
-  const syncColIndex = colLetterToIndex(syncColumnLetter);
+  return {
+    accessToken,
+    spreadsheetId,
+    sheetName,
+    readRange,
+    dataStartRow,
+    truthyValues,
+    titleTemplate,
+    bodyTemplate,
+    syncColumnLetter,
+    labels,
+    maxIssuesPerRun,
+    rateLimitDelay,
+    dryRun,
+    githubToken,
+    syncWriteBackValue,
+  };
+}
 
-  // Google Sheets client
-  const auth = new OAuth2Client();
-  auth.setCredentials({ access_token: accessToken });
-  const sheets: sheets_v4.Sheets = sheetsApi({ version: "v4", auth });
+type ProcessResult = {
+  processed: number;
+  created: number;
+  skipped: number;
+  failed: number;
+  createdUrls: string[];
+};
 
-  // Fetch values
-  const range = `${sheetName}!${readRange}`;
-  const getRes = await sheets.spreadsheets.values.get({ spreadsheetId, range });
-  const values: unknown[][] = getRes.data.values || [];
-
-  // Determine offsets derived from readRange (start column/row in the sheet)
-  const { startColIndex, startRowNumber } = parseA1Start(readRange);
-
-  // Build header mapping: columns A,B,C...
-  // We don't rely on header names; we expose row.A, row.B ... regardless of header content
+async function processRows(
+  cfg: Config,
+  values: unknown[][],
+  startColIndex: number,
+  startRowNumber: number,
+  sheets: sheets_v4.Sheets,
+  octokit: ReturnType<typeof github.getOctokit>,
+): Promise<ProcessResult> {
   const now = new Date().toISOString();
-
   let processed = 0;
   let created = 0;
   let skipped = 0;
   let failed = 0;
   const createdUrls: string[] = [];
-
-  const octokit = github.getOctokit(githubToken);
   const { owner, repo } = github.context.repo;
-
-  // Translate sheet-level dataStartRow to values[] index by subtracting the range's base row
-  const startRowIndex = Math.max(0, dataStartRow - startRowNumber);
-  // Treat non-positive or NaN values as "no limit"
-  const limit = maxIssuesPerRun > 0 ? maxIssuesPerRun : Number.MAX_SAFE_INTEGER;
+  const syncColIndex = colLetterToIndex(cfg.syncColumnLetter);
+  const startRowIndex = Math.max(0, cfg.dataStartRow - startRowNumber);
+  const limit =
+    cfg.maxIssuesPerRun > 0 ? cfg.maxIssuesPerRun : Number.MAX_SAFE_INTEGER;
 
   let warnedSyncOutOfRange = false;
   for (let i = startRowIndex; i < values.length; i++) {
@@ -179,44 +222,32 @@ async function main() {
 
     const rowValues = values[i] || [];
 
-    // Determine synced
     const syncIndexInRow = syncColIndex - startColIndex;
     let cellVal = "";
     if (syncIndexInRow >= 0 && syncIndexInRow < rowValues.length) {
       cellVal = String(rowValues[syncIndexInRow] ?? "").trim();
     } else if (!warnedSyncOutOfRange) {
       core.warning(
-        `SYNC_COLUMN (${syncColumnLetter}) is outside READ_RANGE (${readRange}). Existing sync flags cannot be read; rows will be treated as unsynced.`,
+        `SYNC_COLUMN (${cfg.syncColumnLetter}) is outside READ_RANGE (${cfg.readRange}). Existing sync flags cannot be read; rows will be treated as unsynced.`,
       );
       warnedSyncOutOfRange = true;
     }
-    const isSynced = truthyValues.includes(cellVal);
+    const isSynced = cfg.truthyValues.includes(cellVal);
     if (isSynced) {
       skipped++;
       continue;
     }
 
-    // Build row map A,B,C...
     const rowMap: RowMap = {};
     for (let c = 0; c < rowValues.length; c++) {
       const letter = columnNumberToLetters(startColIndex + c);
       rowMap[letter] = String(rowValues[c] ?? "");
     }
 
-    // Absolute row number in the sheet (1-based)
     const rowNumber = startRowNumber + i;
-
-    const context = {
-      row: rowMap,
-      // Row index in the sheet (1-based), accounting for readRange offset
-      rowIndex: rowNumber,
-      now,
-    } as const;
-
-    const title = Mustache.render(titleTemplate, context);
-    const body = Mustache.render(bodyTemplate, context);
-
-    // Skip if the rendered title is empty to avoid creating blank issues
+    const context = { row: rowMap, rowIndex: rowNumber, now } as const;
+    const title = Mustache.render(cfg.titleTemplate, context);
+    const body = Mustache.render(cfg.bodyTemplate, context);
     if (title.trim().length === 0) {
       skipped++;
       core.info(`Skipping row ${rowNumber}: empty title after rendering`);
@@ -225,33 +256,30 @@ async function main() {
 
     try {
       processed++;
-
-      if (!dryRun) {
+      if (!cfg.dryRun) {
         const createRes = await octokit.rest.issues.create({
           owner,
           repo,
           title,
           body,
-          labels,
+          // Normalize to string[] for REST API
+          labels: normalizeLabels(cfg.labels),
         });
         const issueUrl = createRes.data.html_url;
         if (createdUrls.length < 100) createdUrls.push(issueUrl);
-
-        // Write back TRUE to sync column for this row
-        // Sheet is 1-based; adjust for readRange offset
-        const targetRange = `${sheetName}!${syncColumnLetter}${rowNumber}`;
+        const targetRange = `${cfg.sheetName}!${cfg.syncColumnLetter}${rowNumber}`;
         try {
           await sheets.spreadsheets.values.update({
-            spreadsheetId,
+            spreadsheetId: cfg.spreadsheetId,
             range: targetRange,
             valueInputOption: "USER_ENTERED",
-            requestBody: { values: [[syncWriteBackValue]] },
+            requestBody: { values: [[cfg.syncWriteBackValue]] },
           });
         } catch (updateErr: unknown) {
           core.setFailed(
             `CRITICAL: Created issue ${issueUrl} for row ${rowNumber}, but failed to update the spreadsheet. Manual fix is required to prevent duplicate creation. Error: ${updateErr instanceof Error ? updateErr.message : String(updateErr)}`,
           );
-          return; // Abort the action to avoid duplicates
+          return { processed, created, skipped, failed, createdUrls };
         }
         created++;
       } else {
@@ -265,10 +293,41 @@ async function main() {
       );
     }
 
-    if (rateLimitDelay > 0) {
-      await sleep(rateLimitDelay);
-    }
+    if (cfg.rateLimitDelay > 0) await sleep(cfg.rateLimitDelay);
   }
+
+  return { processed, created, skipped, failed, createdUrls };
+}
+
+async function main() {
+  core.info("spreadsheet-to-issue-action: start");
+
+  const cfg = parseConfig(process.env);
+
+  // Google Sheets client
+  const auth = new OAuth2Client();
+  auth.setCredentials({ access_token: cfg.accessToken });
+  const sheets: sheets_v4.Sheets = sheetsApi({ version: "v4", auth });
+
+  // Fetch values
+  const range = `${cfg.sheetName}!${cfg.readRange}`;
+  const getRes = await sheets.spreadsheets.values.get({
+    spreadsheetId: cfg.spreadsheetId,
+    range,
+  });
+  const values: unknown[][] = getRes.data.values || [];
+
+  const { startColIndex, startRowNumber } = parseA1Start(cfg.readRange);
+  const octokit = github.getOctokit(cfg.githubToken);
+
+  const { processed, created, skipped, failed, createdUrls } = await processRows(
+    cfg,
+    values,
+    startColIndex,
+    startRowNumber,
+    sheets,
+    octokit,
+  );
 
   const summary = [
     `Processed: ${processed}`,
