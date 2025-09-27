@@ -162,7 +162,7 @@ async function main() {
       break;
     }
 
-    const rowValues = (values[i] as unknown[]) || [];
+    const rowValues = values[i] || [];
 
     // Determine synced
     const syncIndexInRow = syncColIndex - startColIndex;
