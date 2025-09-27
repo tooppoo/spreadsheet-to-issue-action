@@ -46,7 +46,6 @@ function safeGet<T>(env: NodeJS.ProcessEnv, key: string, def?: T): string | T {
   }
   return v;
 }
-}
 
 // Parse the start reference of an A1 range (e.g. 'C5:F' -> { startColIndex: 2, startRowNumber: 5 })
 function parseA1Start(a1: string): {
