@@ -32,6 +32,7 @@ Googleスプレッドシートを読み取り、未連携行に対してGitHub I
   - `read_range`（既定: `A:Z`。列文字で始まるA1範囲のみ対応。例: `A:Z`, `C5:F`。行のみの範囲 `5:10` 等は非対応）
   - `data_start_row`（既定: 2。1未満の値はエラー。未指定や非数値は2にフォールバック）
   - `boolean_truthy_values`（既定: `["TRUE","true","True","1","はい","済"]`）
+  - `sync_write_back_value`（既定: `"TRUE"`。シートへ書き戻す値を上書き可能）
   - `dry_run`（既定: `false`）
 
 ## 出力（Action outputs）
@@ -88,7 +89,7 @@ jobs:
 
 備考:
 
-- 上記のGoogle認証ステップは `token_format: access_token` を使用しています。本Actionは環境変数 `GOOGLE_OAUTH_ACCESS_TOKEN`（または `ACCESS_TOKEN`）からトークンを自動検出します。
+- 上記のGoogle認証ステップは `token_format: access_token` を使用しています。本Actionは環境変数 `GOOGLE_OAUTH_ACCESS_TOKEN` を優先し、見つからない場合は `ACCESS_TOKEN` にフォールバックしてトークンを検出します。
 - 並行実行を避けたい場合は呼び出し側で `concurrency` を設定してください。
 
 ## 開発メモ
