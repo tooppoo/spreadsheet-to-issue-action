@@ -6,6 +6,13 @@ import { sheets_v4, sheets as sheetsApi } from "@googleapis/sheets";
 
 type RowMap = Record<string, string>;
 
+// Mustache テンプレートに渡すコンテキスト型
+type TemplateContext = {
+  readonly row: RowMap;
+  readonly rowIndex: number;
+  readonly now: string;
+};
+
 function sleep(ms: number) {
   return new Promise((res) => setTimeout(res, ms));
 }
@@ -245,7 +252,7 @@ async function processRows(
     }
 
     const rowNumber = startRowNumber + i;
-    const context = { row: rowMap, rowIndex: rowNumber, now } as const;
+  const context: TemplateContext = { row: rowMap, rowIndex: rowNumber, now };
     const title = Mustache.render(cfg.titleTemplate, context);
     const body = Mustache.render(cfg.bodyTemplate, context);
     if (title.trim().length === 0) {
@@ -276,9 +283,9 @@ async function processRows(
             requestBody: { values: [[cfg.syncWriteBackValue]] },
           });
         } catch (updateErr: unknown) {
-          core.setFailed(
-            `CRITICAL: Created issue ${issueUrl} for row ${rowNumber}, but failed to update the spreadsheet. Manual fix is required to prevent duplicate creation. Error: ${updateErr instanceof Error ? updateErr.message : String(updateErr)}`,
-          );
+          const errorMessage = `CRITICAL: Created issue ${issueUrl} for row ${rowNumber}, but failed to update the spreadsheet. Manual fix is required to prevent duplicate creation.`;
+          core.error(errorMessage);
+          core.setFailed(updateErr instanceof Error ? updateErr : String(updateErr));
           return { processed, created, skipped, failed, createdUrls };
         }
         created++;
