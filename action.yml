@@ -38,7 +38,7 @@ inputs:
     required: false
     default: "A:Z"
   data_start_row:
-    description: "データ開始行（1行目はヘッダ）"
+    description: "データ開始行（1行目はヘッダ）。1未満の値はエラー。未指定や数値でない場合は2にフォールバック"
     required: false
     default: "2"
   boolean_truthy_values:
