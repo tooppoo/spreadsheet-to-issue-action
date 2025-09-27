@@ -97,14 +97,16 @@ async function main() {
     "BOOLEAN_TRUTHY_VALUES",
     '["TRUE","true","True","1","はい","済"]',
   );
-  let truthyValues: string[] = [];
+  let truthyValues: string[];
   try {
-    truthyValues = JSON.parse(truthyJson);
-    if (!Array.isArray(truthyValues)) throw new Error("not array");
-    truthyValues = truthyValues.map((s) => String(s));
+    const parsed = JSON.parse(truthyJson);
+    if (!Array.isArray(parsed)) {
+      throw new Error("Input is not a JSON array.");
+    }
+    truthyValues = parsed.map((s) => String(s));
   } catch (e) {
     throw new Error(
-      `boolean_truthy_values must be a JSON array: ${truthyJson}`,
+      `'boolean_truthy_values' must be a valid JSON array. Input: ${truthyJson}. Error: ${e instanceof Error ? e.message : String(e)}`,
     );
   }
 
@@ -197,10 +199,13 @@ async function main() {
       rowMap[letter] = String(rowValues[c] ?? "");
     }
 
+    // Absolute row number in the sheet (1-based)
+    const rowNumber = startRowNumber + i;
+
     const context = {
       row: rowMap,
       // Row index in the sheet (1-based), accounting for readRange offset
-      rowIndex: startRowNumber + i,
+      rowIndex: rowNumber,
       now,
     } as const;
 
@@ -208,7 +213,6 @@ async function main() {
     const body = Mustache.render(bodyTemplate, context);
 
     // Skip if the rendered title is empty to avoid creating blank issues
-    const rowNumber = startRowNumber + i;
     if (title.trim().length === 0) {
       skipped++;
       core.info(`Skipping row ${rowNumber}: empty title after rendering`);
