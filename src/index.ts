@@ -54,9 +54,8 @@ function parseA1Start(a1: string): {
 } {
   const trimmed = a1.trim();
   const firstRef = trimmed.split(":")[0]; // e.g. 'C5'
-  const ref = firstRef.includes("!")
-    ? firstRef.split("!").pop() || firstRef
-    : firstRef;
+  const refParts = firstRef.split("!");
+  const ref = refParts[refParts.length - 1];
   // Match optional $ then letters, optional $ then digits
   const m = ref.match(/\$?([A-Za-z]+)\$?(\d+)?/);
   if (!m) {
@@ -218,7 +217,6 @@ async function main() {
 
     try {
       processed++;
-      let issueUrl: string | undefined;
 
       if (!dryRun) {
         const createRes = await octokit.rest.issues.create({
@@ -228,8 +226,8 @@ async function main() {
           body,
           labels,
         });
-        issueUrl = createRes.data.html_url;
-        if (createdUrls.length < 100 && issueUrl) createdUrls.push(issueUrl);
+        const issueUrl = createRes.data.html_url;
+        if (createdUrls.length < 100) createdUrls.push(issueUrl);
 
         // Write back TRUE to sync column for this row
         // Sheet is 1-based; adjust for readRange offset
