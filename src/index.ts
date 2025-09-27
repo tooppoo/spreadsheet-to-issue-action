@@ -37,6 +37,8 @@ function colLetterToIndex(letter: string): number {
   return result - 1;
 }
 
+function safeGet(env: NodeJS.ProcessEnv, key: string): string;
+function safeGet<T>(env: NodeJS.ProcessEnv, key: string, def: T): T | string;
 function safeGet<T>(env: NodeJS.ProcessEnv, key: string, def?: T): string | T {
   const v = env[key];
   if (v === undefined || v === "") return (def as any) ?? "";
@@ -74,15 +76,15 @@ async function main() {
     );
   }
 
-  const spreadsheetId = safeGet(env, "SPREADSHEET_ID") as string;
-  const sheetName = safeGet(env, "SHEET_NAME") as string;
+  const spreadsheetId = safeGet(env, "SPREADSHEET_ID");
+  const sheetName = safeGet(env, "SHEET_NAME");
   const readRange = safeGet(env, "READ_RANGE", "A:Z");
   const dataStartRow = parseInt(safeGet(env, "DATA_START_ROW", "2"), 10) || 2;
   const truthyJson = safeGet(
     env,
     "BOOLEAN_TRUTHY_VALUES",
     '["TRUE","true","True","1","はい","済"]',
-  ) as string;
+  );
   let truthyValues: string[] = [];
   try {
     truthyValues = JSON.parse(truthyJson);
@@ -94,19 +96,18 @@ async function main() {
     );
   }
 
-  const titleTemplate = safeGet(env, "TITLE_TEMPLATE") as string;
-  const bodyTemplate = safeGet(env, "BODY_TEMPLATE") as string;
-  const syncColumnLetter = safeGet(env, "SYNC_COLUMN") as string;
-  const labelsInput = safeGet(env, "LABELS", "") as string;
+  const titleTemplate = safeGet(env, "TITLE_TEMPLATE");
+  const bodyTemplate = safeGet(env, "BODY_TEMPLATE");
+  const syncColumnLetter = safeGet(env, "SYNC_COLUMN");
+  const labelsInput = safeGet(env, "LABELS", "");
   const labels = parseLabels(labelsInput);
   const maxIssuesPerRun = parseInt(
     safeGet(env, "MAX_ISSUES_PER_RUN", "10"),
     10,
   );
   const rateLimitDelay = parseInt(safeGet(env, "RATE_LIMIT_DELAY", "1000"), 10);
-  const dryRun =
-    (safeGet(env, "DRY_RUN", "false") as string).toLowerCase() === "true";
-  const githubToken = safeGet(env, "GITHUB_TOKEN") as string;
+  const dryRun = safeGet(env, "DRY_RUN", "false").toLowerCase() === "true";
+  const githubToken = safeGet(env, "GITHUB_TOKEN");
 
   if (!spreadsheetId || !sheetName) {
     throw new Error("SPREADSHEET_ID and SHEET_NAME are required");
