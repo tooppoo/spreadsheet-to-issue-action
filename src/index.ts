@@ -124,6 +124,9 @@ async function main() {
   const githubToken = safeGet(env, "GITHUB_TOKEN");
   const syncWriteBackValue = safeGet(env, "SYNC_WRITE_BACK_VALUE", "TRUE");
 
+  if (!githubToken) {
+    throw new Error("GITHUB_TOKEN is required");
+  }
   if (!spreadsheetId || !sheetName) {
     throw new Error("SPREADSHEET_ID and SHEET_NAME are required");
   }
