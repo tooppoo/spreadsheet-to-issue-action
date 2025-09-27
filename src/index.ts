@@ -368,5 +368,5 @@ function columnNumberToLetters(index: number): string {
 }
 
 main().catch((err: unknown) => {
-  core.setFailed(err instanceof Error ? err.message : String(err));
+  core.setFailed(err instanceof Error ? err : String(err));
 });
