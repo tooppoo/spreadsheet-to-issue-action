@@ -3,6 +3,7 @@
 このActionは、`google-github-actions/auth@v2` を用いたOIDC認証（Workload Identity Federation）でGoogle Sheets APIにアクセスします。
 
 ## 前提
+
 - GCPプロジェクトがあること
 - GitHubリポジトリ/Orgの管理権限があること
 

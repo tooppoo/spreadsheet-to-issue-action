@@ -18,18 +18,18 @@ jobs:
         with:
           workload_identity_provider: ${{ secrets.GOOGLE_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GOOGLE_SERVICE_ACCOUNT }}
-          token_format: 'access_token'
-          access_token_scopes: 'https://www.googleapis.com/auth/spreadsheets'
+          token_format: "access_token"
+          access_token_scopes: "https://www.googleapis.com/auth/spreadsheets"
 
       - name: Sync spreadsheet to issues
         uses: ./
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           spreadsheet_id: ${{ secrets.SPREADSHEET_ID }}
-          sheet_name: 'Sheet1'
-          title_template: '[{{ row.A }}] {{ row.B }}'
+          sheet_name: "Sheet1"
+          title_template: "[{{ row.A }}] {{ row.B }}"
           body_template: '内容: {{ row.C }}\n期限: {{ row.D }}'
-          labels: 'example,auto'
+          labels: "example,auto"
           max_issues_per_run: 1
           rate_limit_delay: 1000
-          sync_column: 'E'
+          sync_column: "E"
