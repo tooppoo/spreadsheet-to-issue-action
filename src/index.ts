@@ -53,7 +53,7 @@ function parseA1Start(a1: string): {
   startRowNumber: number;
 } {
   const trimmed = a1.trim();
-  const firstRef = trimmed.split(":")[0] ?? trimmed; // e.g. 'C5'
+  const firstRef = trimmed.split(":")[0]; // e.g. 'C5'
   const ref = firstRef.includes("!")
     ? firstRef.split("!").pop() || firstRef
     : firstRef;
