@@ -122,6 +122,7 @@ async function main() {
   const rateLimitDelay = parseInt(safeGet(env, "RATE_LIMIT_DELAY", "1000"), 10);
   const dryRun = safeGet(env, "DRY_RUN", "false").toLowerCase() === "true";
   const githubToken = safeGet(env, "GITHUB_TOKEN");
+  const syncWriteBackValue = safeGet(env, "SYNC_WRITE_BACK_VALUE", "TRUE");
 
   if (!spreadsheetId || !sheetName) {
     throw new Error("SPREADSHEET_ID and SHEET_NAME are required");
@@ -146,7 +147,7 @@ async function main() {
   const values: unknown[][] = getRes.data.values || [];
 
   // Determine offsets derived from readRange (start column/row in the sheet)
-  const { startColIndex, startRowNumber } = parseA1Start(String(readRange));
+  const { startColIndex, startRowNumber } = parseA1Start(readRange);
 
   // Build header mapping: columns A,B,C...
   // We don't rely on header names; we expose row.A, row.B ... regardless of header content
@@ -240,7 +241,7 @@ async function main() {
           spreadsheetId,
           range: targetRange,
           valueInputOption: "USER_ENTERED",
-          requestBody: { values: [[true]] },
+          requestBody: { values: [[syncWriteBackValue]] },
         });
         created++;
       } else {

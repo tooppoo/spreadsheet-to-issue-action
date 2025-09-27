@@ -45,6 +45,10 @@ inputs:
     description: "既連携判定のtruthy集合（JSON配列）"
     required: false
     default: '["TRUE","true","True","1","はい","済"]'
+  sync_write_back_value:
+    description: '書き戻し値（既定: "TRUE"）。ユーザー表示用に別の値（例: "済"）を書き込みたい場合に指定'
+    required: false
+    default: "TRUE"
   dry_run:
     description: "作成/書戻しを行わずログのみ"
     required: false
@@ -103,9 +107,12 @@ runs:
         MAX_ISSUES_PER_RUN: ${{ inputs.max_issues_per_run }}
         RATE_LIMIT_DELAY: ${{ inputs.rate_limit_delay }}
         SYNC_COLUMN: ${{ inputs.sync_column }}
+        SYNC_WRITE_BACK_VALUE: ${{ inputs.sync_write_back_value }}
         READ_RANGE: ${{ inputs.read_range }}
         DATA_START_ROW: ${{ inputs.data_start_row }}
         BOOLEAN_TRUTHY_VALUES: ${{ inputs.boolean_truthy_values }}
         DRY_RUN: ${{ inputs.dry_run }}
         # Inherit Google access token from caller's OIDC step
         GOOGLE_OAUTH_ACCESS_TOKEN: ${{ env.GOOGLE_OAUTH_ACCESS_TOKEN }}
+        # Fallback: also respects ACCESS_TOKEN if provided in the runner env
+        ACCESS_TOKEN: ${{ env.ACCESS_TOKEN }}
