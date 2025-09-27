@@ -43,6 +43,26 @@ function safeGet<T>(env: NodeJS.ProcessEnv, key: string, def?: T): string | T {
   return v;
 }
 
+// Parse the start reference of an A1 range (e.g. 'C5:F' -> { startColIndex: 2, startRowNumber: 5 })
+function parseA1Start(a1: string): {
+  startColIndex: number;
+  startRowNumber: number;
+} {
+  const trimmed = a1.trim();
+  const firstRef = trimmed.split(":")[0] ?? trimmed; // e.g. 'C5'
+  const ref = firstRef.includes("!")
+    ? firstRef.split("!").pop() || firstRef
+    : firstRef;
+  // Match optional $ then letters, optional $ then digits
+  const m = ref.match(/\$?([A-Za-z]+)\$?(\d+)?/);
+  if (!m) {
+    return { startColIndex: 0, startRowNumber: 1 };
+  }
+  const letters = m[1];
+  const digits = m[2] ? parseInt(m[2], 10) : 1;
+  return { startColIndex: colLetterToIndex(letters), startRowNumber: digits };
+}
+
 async function main() {
   core.info("spreadsheet-to-issue-action: start");
 
@@ -108,11 +128,10 @@ async function main() {
   // Fetch values
   const range = `${sheetName}!${readRange}`;
   const getRes = await sheets.spreadsheets.values.get({ spreadsheetId, range });
-  const values: any[][] = getRes.data.values || [];
+  const values: unknown[][] = getRes.data.values || [];
 
-  if (values.length < dataStartRow - 1) {
-    core.info("No data rows to process");
-  }
+  // Determine offsets derived from readRange (start column/row in the sheet)
+  const { startColIndex, startRowNumber } = parseA1Start(String(readRange));
 
   // Build header mapping: columns A,B,C...
   // We don't rely on header names; we expose row.A, row.B ... regardless of header content
@@ -127,20 +146,31 @@ async function main() {
   const octokit = github.getOctokit(githubToken);
   const { owner, repo } = github.context.repo;
 
-  const startRowIndex = dataStartRow - 1; // zero-based in values array
+  // Translate sheet-level dataStartRow to values[] index by subtracting the range's base row
+  const startRowIndex = Math.max(0, dataStartRow - startRowNumber);
   // Treat non-positive or NaN values as "no limit"
   const limit = maxIssuesPerRun > 0 ? maxIssuesPerRun : Number.MAX_SAFE_INTEGER;
 
+  let warnedSyncOutOfRange = false;
   for (let i = startRowIndex; i < values.length; i++) {
     if (created >= limit) {
       core.info(`Reached max_issues_per_run (${limit}); stopping early`);
       break;
     }
 
-    const rowValues = values[i] || [];
+    const rowValues = (values[i] as unknown[]) || [];
 
     // Determine synced
-    const cellVal = String(rowValues[syncColIndex] ?? "").trim();
+    const syncIndexInRow = syncColIndex - startColIndex;
+    let cellVal = "";
+    if (syncIndexInRow >= 0 && syncIndexInRow < rowValues.length) {
+      cellVal = String(rowValues[syncIndexInRow] ?? "").trim();
+    } else if (!warnedSyncOutOfRange) {
+      core.warning(
+        `SYNC_COLUMN (${syncColumnLetter}) is outside READ_RANGE (${readRange}). Existing sync flags cannot be read; rows will be treated as unsynced.`,
+      );
+      warnedSyncOutOfRange = true;
+    }
     const isSynced = truthyValues.includes(cellVal);
     if (isSynced) {
       skipped++;
@@ -150,13 +180,14 @@ async function main() {
     // Build row map A,B,C...
     const rowMap: RowMap = {};
     for (let c = 0; c < rowValues.length; c++) {
-      const letter = columnNumberToLetters(c);
+      const letter = columnNumberToLetters(startColIndex + c);
       rowMap[letter] = String(rowValues[c] ?? "");
     }
 
     const context = {
       row: rowMap,
-      rowIndex: i + 1, // 1-based
+      // Row index in the sheet (1-based), accounting for readRange offset
+      rowIndex: startRowNumber + i,
       now,
     } as const;
 
@@ -179,7 +210,8 @@ async function main() {
         if (createdUrls.length < 100 && issueUrl) createdUrls.push(issueUrl);
 
         // Write back TRUE to sync column for this row
-        const rowNumber = i + 1; // sheet is 1-based
+        // Sheet is 1-based; adjust for readRange offset
+        const rowNumber = startRowNumber + i;
         const targetRange = `${sheetName}!${syncColumnLetter}${rowNumber}`;
         await sheets.spreadsheets.values.update({
           spreadsheetId,
