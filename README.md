@@ -59,6 +59,8 @@ jobs:
 
       - name: Sync spreadsheet to issues
         uses: tooppoo/spreadsheet-to-issue-action@0.0.1
+        env:
+          GOOGLE_OAUTH_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           spreadsheet_id: ${{ secrets.SPREADSHEET_ID }}
