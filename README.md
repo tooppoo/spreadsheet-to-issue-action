@@ -23,7 +23,7 @@ Googleスプレッドシートを読み取り、未連携行に対してGitHub I
   - `labels`（既定: 空文字。JSON配列 or カンマ区切り）
   - `max_issues_per_run`（既定: 10。0以下やNaNは「無制限」として扱われます）
   - `rate_limit_delay`（既定: 1000ms）
-  - `read_range`（既定: `A:Z`）
+  - `read_range`（既定: `A:Z`。列文字で始まるA1範囲のみ対応。例: `A:Z`, `C5:F`。行のみの範囲 `5:10` 等は非対応）
   - `data_start_row`（既定: 2）
   - `boolean_truthy_values`（既定: `["TRUE","true","True","1","はい","済"]`）
   - `dry_run`（既定: `false`）

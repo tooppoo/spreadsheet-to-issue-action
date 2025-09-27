@@ -34,7 +34,7 @@ inputs:
     required: false
     default: "1000"
   read_range:
-    description: '取得範囲（例: "A:Z"）'
+    description: '取得範囲（列文字で始まるA1範囲のみ対応。例: "A:Z", "C5:F"。行のみの範囲 "5:10" 等は非対応）'
     required: false
     default: "A:Z"
   data_start_row:
