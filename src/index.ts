@@ -50,7 +50,7 @@ async function main() {
 	const accessToken = env.GOOGLE_OAUTH_ACCESS_TOKEN || env.ACCESS_TOKEN || '';
 	if (!accessToken) {
 		core.warning(
-			'GOOGLE_OAUTH_ACCESS_TOKEN が見つかりません。google-github-actions/auth@v2 の token_format: access_token を使用し、環境変数としてエクスポートされる前提です。'
+			"GOOGLE_OAUTH_ACCESS_TOKEN is not found. Ensure you run google-github-actions/auth@v2 with token_format: 'access_token' and export it as an environment variable."
 		);
 	}
 
@@ -67,7 +67,7 @@ async function main() {
 		if (!Array.isArray(truthyValues)) throw new Error('not array');
 		truthyValues = truthyValues.map((s) => String(s));
 	} catch (e) {
-		throw new Error(`boolean_truthy_values はJSON配列で指定してください: ${truthyJson}`);
+		throw new Error(`boolean_truthy_values must be a JSON array: ${truthyJson}`);
 	}
 
 	const titleTemplate = String(safeGet(env, 'TITLE_TEMPLATE'));
@@ -81,13 +81,13 @@ async function main() {
 	const githubToken = String(safeGet(env, 'GITHUB_TOKEN'));
 
 	if (!spreadsheetId || !sheetName) {
-		throw new Error('SPREADSHEET_ID と SHEET_NAME は必須です');
+		throw new Error('SPREADSHEET_ID and SHEET_NAME are required');
 	}
 	if (!titleTemplate || !bodyTemplate) {
-		throw new Error('TITLE_TEMPLATE と BODY_TEMPLATE は必須です');
+		throw new Error('TITLE_TEMPLATE and BODY_TEMPLATE are required');
 	}
 	if (!syncColumnLetter) {
-		throw new Error('SYNC_COLUMN は必須です');
+		throw new Error('SYNC_COLUMN is required');
 	}
 
 	const syncColIndex = colLetterToIndex(syncColumnLetter);
@@ -105,7 +105,7 @@ async function main() {
 	const values: any[][] = getRes.data.values || [];
 
 	if (values.length < dataStartRow - 1) {
-		core.info('データ行がありません');
+		core.info('No data rows to process');
 	}
 
 	// Build header mapping: columns A,B,C...
@@ -126,7 +126,7 @@ async function main() {
 
 	for (let i = startRowIndex; i < values.length; i++) {
 		if (created >= limit) {
-			core.info(`max_issues_per_run(${limit})に達したため終了`);
+			core.info(`Reached max_issues_per_run (${limit}); stopping early`);
 			break;
 		}
 
@@ -187,7 +187,7 @@ async function main() {
 			}
 		} catch (err: any) {
 			failed++;
-			core.warning(`行 ${i + 1} の処理でエラー: ${err?.message || String(err)}`);
+			core.warning(`Error processing row ${i + 1}: ${err?.message || String(err)}`);
 		}
 
 		if (rateLimitDelay > 0) {
