@@ -56,8 +56,8 @@ function parseA1Start(a1: string): {
   const firstRef = trimmed.split(":")[0]; // e.g. 'C5'
   const refParts = firstRef.split("!");
   const ref = refParts[refParts.length - 1];
-  // Match optional $ then letters, optional $ then digits
-  const m = ref.match(/\$?([A-Za-z]+)\$?(\d+)?/);
+  // Match the entire ref: optional $ then letters, optional $ then digits
+  const m = ref.match(/^\$?([A-Za-z]+)\$?(\d+)?$/);
   if (!m) {
     throw new Error(
       `READ_RANGE must start with a column reference (e.g., 'A:Z', 'C5:F'). Given: '${a1}'`,
@@ -237,12 +237,19 @@ async function main() {
         // Write back TRUE to sync column for this row
         // Sheet is 1-based; adjust for readRange offset
         const targetRange = `${sheetName}!${syncColumnLetter}${rowNumber}`;
-        await sheets.spreadsheets.values.update({
-          spreadsheetId,
-          range: targetRange,
-          valueInputOption: "USER_ENTERED",
-          requestBody: { values: [[syncWriteBackValue]] },
-        });
+        try {
+          await sheets.spreadsheets.values.update({
+            spreadsheetId,
+            range: targetRange,
+            valueInputOption: "USER_ENTERED",
+            requestBody: { values: [[syncWriteBackValue]] },
+          });
+        } catch (updateErr: unknown) {
+          core.setFailed(
+            `CRITICAL: Created issue ${issueUrl} for row ${rowNumber}, but failed to update the spreadsheet. Manual fix is required to prevent duplicate creation. Error: ${updateErr instanceof Error ? updateErr.message : String(updateErr)}`,
+          );
+          return; // Abort the action to avoid duplicates
+        }
         created++;
       } else {
         core.info(`[dry_run] Create issue: ${title}`);
