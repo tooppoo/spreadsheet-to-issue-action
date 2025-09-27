@@ -83,7 +83,16 @@ async function main() {
   const spreadsheetId = safeGet(env, "SPREADSHEET_ID");
   const sheetName = safeGet(env, "SHEET_NAME");
   const readRange = safeGet(env, "READ_RANGE", "A:Z");
-  const dataStartRow = parseInt(safeGet(env, "DATA_START_ROW", "2"), 10) || 2;
+  const dataStartRowInput = safeGet(env, "DATA_START_ROW", "2");
+  let dataStartRow = parseInt(dataStartRowInput, 10);
+  if (Number.isNaN(dataStartRow)) {
+    dataStartRow = 2;
+  }
+  if (dataStartRow < 1) {
+    throw new Error(
+      `data_start_row must be a positive integer, but got ${dataStartRow}.`,
+    );
+  }
   const truthyJson = safeGet(
     env,
     "BOOLEAN_TRUTHY_VALUES",
