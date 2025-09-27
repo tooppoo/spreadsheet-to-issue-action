@@ -128,9 +128,8 @@ async function main() {
   const { owner, repo } = github.context.repo;
 
   const startRowIndex = dataStartRow - 1; // zero-based in values array
-  const limit = Number.isFinite(maxIssuesPerRun)
-    ? maxIssuesPerRun
-    : Number.MAX_SAFE_INTEGER;
+  // Treat non-positive or NaN values as "no limit"
+  const limit = maxIssuesPerRun > 0 ? maxIssuesPerRun : Number.MAX_SAFE_INTEGER;
 
   for (let i = startRowIndex; i < values.length; i++) {
     if (created >= limit) {
@@ -193,10 +192,10 @@ async function main() {
         core.info(`[dry_run] Create issue: ${title}`);
         created++;
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       failed++;
       core.warning(
-        `Error processing row ${i + 1}: ${err?.message || String(err)}`,
+        `Error processing row ${i + 1}: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
 
@@ -236,6 +235,6 @@ function columnNumberToLetters(index: number): string {
   return s;
 }
 
-main().catch((err) => {
-  core.setFailed(err?.message || String(err));
+main().catch((err: unknown) => {
+  core.setFailed(err instanceof Error ? err.message : String(err));
 });
