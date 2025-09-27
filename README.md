@@ -1,104 +1,87 @@
-# spreadsheet-to-issue-action
-googleスプレッドシートのレコードを元にGitHub Issueを立てるアクション
+## 概要
+Googleスプレッドシートを読み取り、未連携行に対してGitHub Issueを作成します。作成成功時は指定列へTRUEを書き戻し、重複作成を防ぎます。OIDCを用いたGoogle認証（Workload Identity Federation）で安全に実行します。
 
-**他リポジトリから再利用可能ワークフローを呼び出す手順**
+## 主要機能
+- mustacheテンプレートで `{{ row.A }}` のように列参照してタイトル/本文を生成
+- OIDCでGoogle Sheets APIに読み書きアクセス
+- 成功時に `sync_column` のセルへ TRUE を書き戻し
+- `max_issues_per_run` と `rate_limit_delay` でレート制御
+- 途中失敗は継続し、集計値とURL一覧を出力
 
-- このリポジトリには、`workflow_call` で呼び出せる再利用可能ワークフローがあります。
-  - ファイル: `.github/workflows/sync-spreadsheet-to-issues.yml`
+## 入力（Action inputs）
+- 必須
+  - `github_token`: Issues作成用トークン（例: `secrets.GITHUB_TOKEN`）
+  - `spreadsheet_id`: SpreadsheetドキュメントID
+  - `sheet_name`: タブ名
+  - `title_template`: mustacheテンプレート
+  - `body_template`: mustacheテンプレート
+  - `sync_column`: 連携済み判定/書き戻し列（例: `"E"`）
+- 任意（既定値）
+  - `labels`（既定: 空文字。JSON配列 or カンマ区切り）
+  - `max_issues_per_run`（既定: 10）
+  - `rate_limit_delay`（既定: 1000ms）
+  - `read_range`（既定: `A:Z`）
+  - `data_start_row`（既定: 2）
+  - `boolean_truthy_values`（既定: `["TRUE","true","True","1","はい","済"]`）
+  - `dry_run`（既定: `false`）
 
-## 1. 呼び出し側リポジトリにワークフローを作成
+## 出力（Action outputs）
+- `processed_count`, `created_count`, `skipped_count`, `failed_count`
+- `created_issue_urls`（JSON配列。サマリー掲載は最大100件）
+- `summary_markdown`（集計とURL一覧）
 
-呼び出し側リポジトリに、以下のようなワークフローを追加します。`<OWNER>/<REPO>` と参照バージョンは自分の環境に合わせて置き換えてください（タグやコミットSHAで固定することを推奨）。
+## ワークフロー例
 
 ```yaml
-name: Scheduled Spreadsheet Sync
-
-on:
-  schedule:
-    - cron: '*/30 * * * *'
-  workflow_dispatch:
-
 jobs:
-  sync:
+  sync-spreadsheet:
+    runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
       issues: write
       id-token: write
-    uses: <OWNER>/<REPO>/.github/workflows/sync-spreadsheet-to-issues.yml@vX.Y.Z
-    with:
-      config_path: '.github/spreadsheet-sync-config.json'
-      sync_state_path: '.github/sync-state.json'
-      google_service_account: ${{ vars.GOOGLE_SERVICE_ACCOUNT_EMAIL }}
-      wif_provider: ${{ vars.WIF_PROVIDER }}
-      max_issues_per_run: 50
-      rate_limit_delay: 0.33
-      dry_run: false
-    secrets:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GOOGLE_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GOOGLE_SERVICE_ACCOUNT }}
+          token_format: 'access_token'
+          access_token_scopes: 'https://www.googleapis.com/auth/spreadsheets'
+
+      - name: Sync spreadsheet to issues
+        uses: tooppoo/spreadsheet-to-issue-action@0.0.1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          spreadsheet_id: ${{ secrets.SPREADSHEET_ID }}
+          sheet_name: 'Sheet1'
+          title_template: '[{{ row.A }}] {{ row.B }}'
+          body_template: |
+            内容: {{ row.C }}
+            期限: {{ row.D }}
+          labels: 'spreadsheet-sync,auto-created'
+          max_issues_per_run: 10
+          rate_limit_delay: 1000
+          sync_column: 'E'
+          # 任意:
+          # read_range: 'A:Z'
+          # data_start_row: '2'
+          # boolean_truthy_values: '["TRUE","true","True","1","はい","済"]'
+          # dry_run: 'false'
 ```
 
-ポイント:
-- `permissions` に `contents: write`, `issues: write`, `id-token: write` が必須です（状態ファイルのコミット・Issue作成・OIDC用）。
-- `GITHUB_TOKEN` を呼び出し側から明示的に渡してください。
+備考:
+- 上記のGoogle認証ステップは `token_format: access_token` を使用しています。本Actionは環境変数 `GOOGLE_OAUTH_ACCESS_TOKEN`（または `ACCESS_TOKEN`）からトークンを自動検出します。
+- 並行実行を避けたい場合は呼び出し側で `concurrency` を設定してください。
 
-## 2. 設定ファイルを追加
+## 開発メモ
+- ランタイム: Node.js 22 / pnpm
+- 形式: Composite Action（依存インストールとビルドはランナー上で実行）
+- distはリポジトリにコミットしません
 
-呼び出し側リポジトリに `.github/spreadsheet-sync-config.json` を作成し、以下を参考に値を設定します（このリポジトリの `.github/spreadsheet-sync-config.json.example` をコピー可）。
-
-```json
-{
-  "spreadsheet_id": "<Google スプレッドシートID>",
-  "sheet_name": "Sheet1",
-  "title_template": "[{{ row.A }}] {{ row.B }}",
-  "body_template": "... {{ row.C }} ... _{{ row_number }}_",
-  "labels": ["spreadsheet-sync", "auto-created"],
-  "repository": "<issues を作成する GitHub リポジトリ>"
-}
-```
-
-- `spreadsheet_id`: 対象スプレッドシートのID。
-- `sheet_name`: 読み取りシート名（省略時 `Sheet1`）。
-- `title_template` / `body_template`: `{{ row.A }}` のように列参照、`{{ row_number }}`, `{{ row | json }}` が使用可能。ワークフロー内で `@` は全角 `＠` に置換されます（不要メンション防止）。
-- `labels`: 付与するIssueラベル配列。
-- `repository`: 既定は実行中のリポジトリ。別リポジトリにIssueを作成したい場合に指定します。
-  - **注意:** 別リポジトリにIssueを作成する場合、呼び出し側ワークフローで渡すトークンには、そのリポジトリへの`issues: write`権限が必要です。既定の`GITHUB_TOKEN`は実行中のリポジトリにしか権限がないため、代わりにPersonal Access Token (PAT)などを`secrets`に設定して渡す必要があります。
-
-## 3. Google 認証（Workload Identity Federation）
-
-ワークフローは `google-github-actions/auth` を用いてOIDCでGoogleに認証します。以下を準備してください。
-
-- Google Cloudでサービスアカウントを作成し、Google Sheets API を有効化。
-- 対象スプレッドシートをサービスアカウントのメールアドレスに共有（閲覧権限以上）。
-- Workload Identity Federation のプロバイダを作成し、GitHubリポジトリ/Orgと関連付け。（設定方法の詳細は [google-github-actions/auth のドキュメント](https://github.com/google-github-actions/auth#setting-up-workload-identity-federation) を参照）
-- 呼び出し側リポジトリの Actions 変数（`Settings > Secrets and variables > Actions > Variables`）に以下を登録、または `with:` で直接値を渡す。
-  - `GOOGLE_SERVICE_ACCOUNT_EMAIL`: サービスアカウントのメール
-  - `WIF_PROVIDER`: プロバイダリソース名（例: `projects/…/locations/global/workloadIdentityPools/…/providers/…`）
-
-## 4. どう動くか（概要）
-
-- 前回処理行（`.github/sync-state.json`）より後の新規行を取得し、テンプレートでIssueを作成します。
-- 実行後は最後に処理した行番号を `.github/sync-state.json` に書き戻し、同ブランチへコミット＆プッシュします。
-- `max_issues_per_run` と `rate_limit_delay` で作成件数とレートを制御できます。`dry_run: true` で作成せずログのみ出力します。
-
-## 5. 入力パラメータ
-
-| 入力パラメータ | 型 | 説明 | 既定値 | 必須 |
-|---|---|---|---|---|
-| `config_path` | string | 設定ファイルへのパス | `.github/spreadsheet-sync-config.json` | No |
-| `sync_state_path` | string | 同期状態ファイルへのパス | `.github/sync-state.json` | No |
-| `google_service_account` | string | Googleサービスアカウントのメールアドレス | - | Yes |
-| `wif_provider` | string | Workload Identity Federationプロバイダのリソース名 | - | Yes |
-| `max_issues_per_run` | number | 1回の実行で作成するIssueの最大数 | `50` | No |
-| `rate_limit_delay` | number | API呼び出し間の遅延（秒） | `0.33` | No |
-| `dry_run` | boolean | Issueを作成せずにログのみ出力する | `false` | No |
-| `secrets.GITHUB_TOKEN` | secret | GitHub API認証用のトークン | - | Yes |
-
-## 6. バージョン固定の推奨
-
-呼び出しはタグ（例: `@v1`）やコミットSHAで固定してください。例:
-
-```
-uses: <OWNER>/<REPO>/.github/workflows/sync-spreadsheet-to-issues.yml@v1
-```
-
-以上で、他リポジトリからこのワークフローを安全に再利用できます。
+## ライセンス
+MIT
