@@ -199,6 +199,14 @@ async function main() {
     const title = Mustache.render(titleTemplate, context);
     const body = Mustache.render(bodyTemplate, context);
 
+    // Skip if the rendered title is empty to avoid creating blank issues
+    const rowNumber = startRowNumber + i;
+    if (title.trim().length === 0) {
+      skipped++;
+      core.info(`Skipping row ${rowNumber}: empty title after rendering`);
+      continue;
+    }
+
     try {
       processed++;
       let issueUrl: string | undefined;
@@ -216,7 +224,6 @@ async function main() {
 
         // Write back TRUE to sync column for this row
         // Sheet is 1-based; adjust for readRange offset
-        const rowNumber = startRowNumber + i;
         const targetRange = `${sheetName}!${syncColumnLetter}${rowNumber}`;
         await sheets.spreadsheets.values.update({
           spreadsheetId,
@@ -232,7 +239,7 @@ async function main() {
     } catch (err: unknown) {
       failed++;
       core.warning(
-        `Error processing row ${i + 1}: ${err instanceof Error ? err.message : String(err)}`,
+        `Error processing row ${rowNumber}: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
 
