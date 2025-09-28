@@ -20,12 +20,14 @@ function sleep(ms: number) {
 type LabelInput = string | { name: string; [k: string]: unknown };
 
 function isLabelObject(v: unknown): v is { name: string } {
-  return !!v && typeof v === "object" && typeof (v as { name?: unknown }).name === "string";
+  return (
+    !!v &&
+    typeof v === "object" &&
+    typeof (v as { name?: unknown }).name === "string"
+  );
 }
 
-function parseLabels(
-  input: string | undefined,
-): LabelInput[] | undefined {
+function parseLabels(input: string | undefined): LabelInput[] | undefined {
   if (!input) return undefined;
   const trimmed = input.trim();
   if (!trimmed) return undefined;
@@ -40,7 +42,6 @@ function parseLabels(
           if (isLabelObject(v)) return { name: v.name };
           return String(v);
         });
-
       }
     } catch (e) {
       core.warning(
@@ -55,7 +56,9 @@ function parseLabels(
     .filter(Boolean);
 }
 
-function normalizeLabels(labels: LabelInput[] | undefined): string[] | undefined {
+function normalizeLabels(
+  labels: LabelInput[] | undefined,
+): string[] | undefined {
   return labels?.map((l) => (typeof l === "string" ? l : l.name));
 }
 
@@ -162,13 +165,17 @@ function parseConfig(env: NodeJS.ProcessEnv): Config {
   const maxIssuesPerRunInput = safeGet(env, "MAX_ISSUES_PER_RUN", "10");
   let maxIssuesPerRun = parseInt(maxIssuesPerRunInput, 10);
   if (Number.isNaN(maxIssuesPerRun)) {
-    core.warning(`Invalid 'max_issues_per_run' input: '${maxIssuesPerRunInput}'. Treating as unlimited.`);
+    core.warning(
+      `Invalid 'max_issues_per_run' input: '${maxIssuesPerRunInput}'. Treating as unlimited.`,
+    );
     maxIssuesPerRun = 0;
   }
   const rateLimitDelayInput = safeGet(env, "RATE_LIMIT_DELAY", "1000");
   let rateLimitDelay = parseInt(rateLimitDelayInput, 10);
   if (Number.isNaN(rateLimitDelay)) {
-    core.warning(`Invalid 'rate_limit_delay' input: '${rateLimitDelayInput}'. Using default 1000ms.`);
+    core.warning(
+      `Invalid 'rate_limit_delay' input: '${rateLimitDelayInput}'. Using default 1000ms.`,
+    );
     rateLimitDelay = 1000;
   }
   const dryRun = safeGet(env, "DRY_RUN", "false").toLowerCase() === "true";
@@ -270,7 +277,8 @@ async function processRows(
     created += result.created;
     skipped += result.skipped;
     failed += result.failed;
-    if (result.issueUrl && createdUrls.length < 100) createdUrls.push(result.issueUrl);
+    if (result.issueUrl && createdUrls.length < 100)
+      createdUrls.push(result.issueUrl);
 
     if (cfg.rateLimitDelay > 0) await sleep(cfg.rateLimitDelay);
   }
@@ -289,8 +297,24 @@ async function processSingleRow(args: {
   rowValues: unknown[];
   startColIndex: number;
   rowNumber: number;
-}): Promise<{ processed: number; created: number; skipped: number; failed: number; issueUrl?: string }> {
-  const { cfg, now, owner, repo, sheets, octokit, rowValues, startColIndex, rowNumber } = args;
+}): Promise<{
+  processed: number;
+  created: number;
+  skipped: number;
+  failed: number;
+  issueUrl?: string;
+}> {
+  const {
+    cfg,
+    now,
+    owner,
+    repo,
+    sheets,
+    octokit,
+    rowValues,
+    startColIndex,
+    rowNumber,
+  } = args;
 
   // 行マップを生成
   const rowMap: RowMap = {};
@@ -329,7 +353,9 @@ async function processSingleRow(args: {
       } catch (updateErr: unknown) {
         const errorMessage = `CRITICAL: Created issue ${issueUrl} for row ${rowNumber}, but failed to update the spreadsheet. Manual fix is required to prevent duplicate creation.`;
         core.error(errorMessage);
-        core.setFailed(updateErr instanceof Error ? updateErr : String(updateErr));
+        core.setFailed(
+          updateErr instanceof Error ? updateErr : String(updateErr),
+        );
         return { processed: 1, created: 0, skipped: 0, failed: 1 };
       }
       return { processed: 1, created: 1, skipped: 0, failed: 0, issueUrl };
@@ -366,14 +392,15 @@ async function main() {
   const { startColIndex, startRowNumber } = parseA1Start(cfg.readRange);
   const octokit = github.getOctokit(cfg.githubToken);
 
-  const { processed, created, skipped, failed, createdUrls } = await processRows(
-    cfg,
-    values,
-    startColIndex,
-    startRowNumber,
-    sheets,
-    octokit,
-  );
+  const { processed, created, skipped, failed, createdUrls } =
+    await processRows(
+      cfg,
+      values,
+      startColIndex,
+      startRowNumber,
+      sheets,
+      octokit,
+    );
 
   const summary = [
     `Processed: ${processed}`,
