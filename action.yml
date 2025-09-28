@@ -77,7 +77,8 @@ outputs:
 runs:
   using: "composite"
   steps:
-    # Node.jsやpnpmのセットアップ、依存インストール、ビルドは不要
+  # Node.jsやpnpmのセットアップ、依存インストール、ビルドは不要
+  # dist/index.js は ncc により依存関係込みでバンドル済み
     - id: run
       name: Run sync script
       run: node dist/index.js
