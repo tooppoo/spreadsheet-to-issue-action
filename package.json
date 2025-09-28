@@ -3,9 +3,10 @@
   "version": "0.0.1",
   "description": "GoogleスプレッドシートからGitHub Issueを自動作成するGitHub Action",
   "main": "dist/index.js",
-  "types": "dist/index.d.ts",
   "scripts": {
-    "build": "tsc",
+  "build": "pnpm build:ts && pnpm build:bundle",
+  "build:ts": "tsc",
+  "build:bundle": "npx -y @vercel/ncc build dist/index.js -o dist --minify",
     "lint": "eslint src --ext .ts",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
@@ -16,17 +17,18 @@
     "@actions/core": "^1.10.1",
     "@actions/github": "^6.0.0",
     "@googleapis/sheets": "^6.0.0",
-    "mustache": "^4.2.0",
-    "google-auth-library": "^9.15.1"
+    "google-auth-library": "^9.15.1",
+    "mustache": "^4.2.0"
   },
   "devDependencies": {
-    "typescript": "^5.9.2",
+    "@types/mustache": "^4.2.5",
+    "@types/node": "^22.7.6",
+    "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "@typescript-eslint/parser": "^7.18.0",
+    "@vercel/ncc": "^0.38.4",
     "eslint": "^8.57.1",
     "prettier": "^3.6.2",
-    "@types/node": "^22.7.6",
-    "@types/mustache": "^4.2.5",
-    "@typescript-eslint/eslint-plugin": "^7.18.0",
-    "@typescript-eslint/parser": "^7.18.0"
+    "typescript": "^5.9.2"
   },
   "engines": {
     "node": ">=22"
