@@ -1,12 +1,12 @@
 ## 概要
 
-Googleスプレッドシートを読み取り、未連携行に対してGitHub Issueを作成します。作成成功時は指定列へTRUEを書き戻し、重複作成を防ぎます。OIDCを用いたGoogle認証（Workload Identity Federation）で安全に実行します。
+Googleスプレッドシートを読み取り、未連携行に対してGitHub Issueを作成します。作成成功時は指定列へ指定の値（既定: TRUE）を書き戻し、重複作成を防ぎます。OIDCを用いたGoogle認証（Workload Identity Federation）で安全に実行します。
 
 ## 主要機能
 
 - mustacheテンプレートで `{{ row.A }}` のように列参照してタイトル/本文を生成
 - OIDCでGoogle Sheets APIに読み書きアクセス
-- 成功時に `sync_column` のセルへ TRUE を書き戻し
+- 成功時に `sync_column` のセルへ書き戻し値（既定: TRUE）を設定
 - `max_issues_per_run` と `rate_limit_delay` でレート制御
 - 途中失敗は継続し、集計値とURL一覧を出力
 
@@ -81,6 +81,7 @@ jobs:
           rate_limit_delay: 1000
           sync_column: "E"
           # 任意:
+          # sync_write_back_value: '済'   # 既定は "TRUE"（表示用に変更したい場合）
           # read_range: 'A:Z'
           # data_start_row: '2'
           # boolean_truthy_values: '["TRUE","true","True","1","はい","済"]'
