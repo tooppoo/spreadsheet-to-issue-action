@@ -13,11 +13,11 @@
   "author": "tooppoo",
   "license": "MIT",
   "dependencies": {
-    "@actions/core": "^1.10.0",
-    "@actions/github": "^5.1.1",
-    "@googleapis/sheets": "^5.0.0",
+    "@actions/core": "^1.10.1",
+    "@actions/github": "^6.0.0",
+    "@googleapis/sheets": "^6.0.0",
     "mustache": "^4.2.0",
-    "google-auth-library": "^9.14.0"
+    "google-auth-library": "^9.15.1"
   },
   "devDependencies": {
     "typescript": "^5.9.2",
