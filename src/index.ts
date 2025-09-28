@@ -101,9 +101,8 @@ function parseA1Start(a1: string): {
 } {
   const trimmed = a1.trim();
   const firstRef = trimmed.split(":")[0]; // e.g. 'C5'
-  const ref = firstRef;
   // Match the entire ref: optional $ then letters, optional $ then digits
-  const m = ref.match(/^\$?([A-Za-z]+)\$?(\d+)?$/);
+  const m = firstRef.match(/^\$?([A-Za-z]+)\$?(\d+)?$/);
   if (!m) {
     throw new Error(
       `READ_RANGE must start with a column reference (e.g., 'A:Z', 'C5:F'). Given: '${a1}'`,
