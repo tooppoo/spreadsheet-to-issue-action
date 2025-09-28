@@ -6,7 +6,7 @@
   "scripts": {
   "build": "pnpm build:ts && pnpm build:bundle",
   "build:ts": "tsc",
-  "build:bundle": "npx -y @vercel/ncc build dist/index.js -o dist --minify",
+  "build:bundle": "ncc build dist/index.js -o dist --minify",
     "lint": "eslint src --ext .ts",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
