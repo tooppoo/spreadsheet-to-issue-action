@@ -37,10 +37,11 @@ function parseLabels(input: string | undefined): LabelInput[] | undefined {
       const arr = JSON.parse(trimmed);
       if (Array.isArray(arr)) {
         // Preserve label objects if provided; normalize strings
-        return arr.map((v): LabelInput => {
-          if (typeof v === "string") return v;
-          if (isLabelObject(v)) return { name: v.name };
-          return String(v);
+        return arr.flatMap((v): LabelInput[] => {
+          if (typeof v === "string") return [v];
+          if (isLabelObject(v)) return [{ name: v.name }];
+          core.warning(`Invalid label format in JSON array, skipping value: ${JSON.stringify(v)}`);
+          return [];
         });
       }
     } catch (e) {
