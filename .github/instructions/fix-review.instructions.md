@@ -16,8 +16,8 @@ When a code review identifies issues in your pull request, it's important to add
 
 5. **Update Documentation**: If your changes affect the project's documentation (e.g., README, comments, etc.), be sure to update it accordingly.
 
-6. **Respond to Review Comments**: Once you've made the necessary changes, respond to the review comments to let the reviewer know that you've addressed their feedback. When reviewer is Gemini, you are allowed to resolve the thread.
+6. **Respond to Review Comments**: Once you've made the necessary changes, respond to the review comments to let the reviewer know that you've addressed their feedback. When reviewer is Gemini, resolve the thread by yourself.
 
-7. **Request a Follow-Up Review**: After making your changes and responding to comments, request a follow-up review from the original reviewer or another team member. When reviewer is Gemini, you can request a re-review by commenting `/gemini review`.
+7. **Request a Follow-Up Review**: After making your changes and responding to comments, request a follow-up review from the original reviewer or another team member. When reviewer is Gemini, request a re-review by commenting `/gemini review`.
 
 By following these steps, you can effectively address issues found in code reviews and improve the quality of your pull request.
