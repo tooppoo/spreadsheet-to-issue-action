@@ -6,6 +6,9 @@ import { sheets_v4, sheets as sheetsApi } from "@googleapis/sheets";
 
 type RowMap = Record<string, string>;
 
+// Summaryに含めるURL件数の上限
+const MAX_URLS_IN_SUMMARY = 100;
+
 // Mustache テンプレートに渡すコンテキスト型
 type TemplateContext = {
   readonly row: RowMap;
@@ -40,7 +43,9 @@ function parseLabels(input: string | undefined): LabelInput[] | undefined {
         return arr.flatMap((v): LabelInput[] => {
           if (typeof v === "string") return [v];
           if (isLabelObject(v)) return [{ name: v.name }];
-          core.warning(`Invalid label format in JSON array, skipping value: ${JSON.stringify(v)}`);
+          core.warning(
+            `Invalid label format in JSON array, skipping value: ${JSON.stringify(v)}`,
+          );
           return [];
         });
       }
@@ -183,12 +188,21 @@ function parseConfig(env: NodeJS.ProcessEnv): Config {
   const githubToken = safeGet(env, "GITHUB_TOKEN");
   const syncWriteBackValue = safeGet(env, "SYNC_WRITE_BACK_VALUE", "TRUE");
 
-  if (!githubToken) throw new Error("GITHUB_TOKEN is required");
-  if (!spreadsheetId || !sheetName)
-    throw new Error("SPREADSHEET_ID and SHEET_NAME are required");
-  if (!titleTemplate || !bodyTemplate)
-    throw new Error("TITLE_TEMPLATE and BODY_TEMPLATE are required");
-  if (!syncColumnLetter) throw new Error("SYNC_COLUMN is required");
+  // 必須入力を一括検証して不足分をまとめて通知
+  const requiredInputs: Record<string, string | undefined> = {
+    GITHUB_TOKEN: githubToken,
+    SPREADSHEET_ID: spreadsheetId,
+    SHEET_NAME: sheetName,
+    TITLE_TEMPLATE: titleTemplate,
+    BODY_TEMPLATE: bodyTemplate,
+    SYNC_COLUMN: syncColumnLetter,
+  };
+  const missingInputs = Object.entries(requiredInputs)
+    .filter(([, value]) => !value)
+    .map(([key]) => key);
+  if (missingInputs.length > 0) {
+    throw new Error(`Required inputs are missing: ${missingInputs.join(", ")}`);
+  }
 
   return {
     accessToken,
@@ -278,7 +292,7 @@ async function processRows(
     created += result.created;
     skipped += result.skipped;
     failed += result.failed;
-    if (result.issueUrl && createdUrls.length < 100)
+    if (result.issueUrl && createdUrls.length < MAX_URLS_IN_SUMMARY)
       createdUrls.push(result.issueUrl);
 
     if (cfg.rateLimitDelay > 0) await sleep(cfg.rateLimitDelay);
