@@ -56,10 +56,7 @@ function parseLabels(
 }
 
 function normalizeLabels(labels: LabelInput[] | undefined): string[] | undefined {
-  if (!labels) return undefined;
-  const out: string[] = [];
-  for (const l of labels) out.push(typeof l === "string" ? l : l.name);
-  return out;
+  return labels?.map((l) => (typeof l === "string" ? l : l.name));
 }
 
 function colLetterToIndex(letter: string): number {
@@ -162,11 +159,18 @@ function parseConfig(env: NodeJS.ProcessEnv): Config {
   const syncColumnLetter = safeGet(env, "SYNC_COLUMN");
   const labelsInput = safeGet(env, "LABELS", "");
   const labels = parseLabels(labelsInput);
-  const maxIssuesPerRun = parseInt(
-    safeGet(env, "MAX_ISSUES_PER_RUN", "10"),
-    10,
-  );
-  const rateLimitDelay = parseInt(safeGet(env, "RATE_LIMIT_DELAY", "1000"), 10);
+  const maxIssuesPerRunInput = safeGet(env, "MAX_ISSUES_PER_RUN", "10");
+  let maxIssuesPerRun = parseInt(maxIssuesPerRunInput, 10);
+  if (Number.isNaN(maxIssuesPerRun)) {
+    core.warning(`Invalid 'max_issues_per_run' input: '${maxIssuesPerRunInput}'. Treating as unlimited.`);
+    maxIssuesPerRun = 0;
+  }
+  const rateLimitDelayInput = safeGet(env, "RATE_LIMIT_DELAY", "1000");
+  let rateLimitDelay = parseInt(rateLimitDelayInput, 10);
+  if (Number.isNaN(rateLimitDelay)) {
+    core.warning(`Invalid 'rate_limit_delay' input: '${rateLimitDelayInput}'. Using default 1000ms.`);
+    rateLimitDelay = 1000;
+  }
   const dryRun = safeGet(env, "DRY_RUN", "false").toLowerCase() === "true";
   const githubToken = safeGet(env, "GITHUB_TOKEN");
   const syncWriteBackValue = safeGet(env, "SYNC_WRITE_BACK_VALUE", "TRUE");
