@@ -357,7 +357,7 @@ async function processSingleRow(args: {
         core.setFailed(
           updateErr instanceof Error ? updateErr : String(updateErr),
         );
-        return { processed: 1, created: 0, skipped: 0, failed: 1 };
+        return { processed: 1, created: 1, skipped: 0, failed: 1, issueUrl };
       }
       return { processed: 1, created: 1, skipped: 0, failed: 0, issueUrl };
     } else {
