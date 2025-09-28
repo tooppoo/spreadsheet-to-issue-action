@@ -91,6 +91,7 @@ jobs:
 
 - 上記のGoogle認証ステップは `token_format: access_token` を使用しています。本Actionは環境変数 `GOOGLE_OAUTH_ACCESS_TOKEN` を優先し、見つからない場合は `ACCESS_TOKEN` にフォールバックしてトークンを検出します。
 - 並行実行を避けたい場合は呼び出し側で `concurrency` を設定してください。
+- Issue作成には成功したものの、スプレッドシートへの書き戻しに失敗した場合は、重複作成を防ぐためAction全体が失敗（fail）します。これは他の行処理エラー（警告を出して継続）とは異なる動作です。
 
 ## 開発メモ
 
