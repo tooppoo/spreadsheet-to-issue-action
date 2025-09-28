@@ -137,7 +137,7 @@ function parseConfig(env: NodeJS.ProcessEnv): Config {
   const accessToken = env.GOOGLE_OAUTH_ACCESS_TOKEN || env.ACCESS_TOKEN || "";
   if (!accessToken) {
     throw new Error(
-      "GOOGLE_OAUTH_ACCESS_TOKEN is not found. Ensure you run google-github-actions/auth@v2 with token_format: 'access_token' and export it as an environment variable.",
+      "Neither GOOGLE_OAUTH_ACCESS_TOKEN nor ACCESS_TOKEN were found. Ensure you run google-github-actions/auth@v2 with token_format: 'access_token' and that the token is available as an environment variable."
     );
   }
 
