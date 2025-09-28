@@ -135,7 +135,7 @@ function parseConfig(env: NodeJS.ProcessEnv): Config {
   const accessToken = env.GOOGLE_OAUTH_ACCESS_TOKEN || env.ACCESS_TOKEN || "";
   if (!accessToken) {
     throw new Error(
-      "Neither GOOGLE_OAUTH_ACCESS_TOKEN nor ACCESS_TOKEN were found. Ensure you run google-github-actions/auth@v2 with token_format: 'access_token' and that the token is available as an environment variable."
+      "Neither GOOGLE_OAUTH_ACCESS_TOKEN nor ACCESS_TOKEN were found. Ensure you run google-github-actions/auth@v2 with token_format: 'access_token' and that the token is available as an environment variable.",
     );
   }
 
@@ -348,42 +348,45 @@ async function processSingleRow(args: {
     return { processed: 0, created: 0, skipped: 1, failed: 0 };
   }
 
+  if (cfg.dryRun) {
+    core.info(`[dry_run] Create issue: ${content.title}`);
+    return { processed: 1, created: 1, skipped: 0, failed: 0 };
+  }
+
+  // 行単位で復旧可能なエラー: Issue 作成失敗のみ捕捉して継続
+  let issueUrl: string;
   try {
-    if (!cfg.dryRun) {
-      const issueUrl = await createIssue(octokit, {
-        owner,
-        repo,
-        title: content.title,
-        body: content.body,
-        labels: normalizeLabels(cfg.labels),
-      });
-      try {
-        await writeBackToSheet(sheets, {
-          spreadsheetId: cfg.spreadsheetId,
-          sheetName: cfg.sheetName,
-          syncColumnLetter: cfg.syncColumnLetter,
-          rowNumber,
-          value: cfg.syncWriteBackValue,
-        });
-      } catch (updateErr: unknown) {
-        const errorMessage = `CRITICAL: Created issue ${issueUrl} for row ${rowNumber}, but failed to update the spreadsheet. Manual fix is required to prevent duplicate creation.`;
-        core.error(errorMessage);
-        core.setFailed(
-          updateErr instanceof Error ? updateErr : String(updateErr),
-        );
-        return { processed: 1, created: 1, skipped: 0, failed: 1, issueUrl };
-      }
-      return { processed: 1, created: 1, skipped: 0, failed: 0, issueUrl };
-    } else {
-      core.info(`[dry_run] Create issue: ${content.title}`);
-      return { processed: 1, created: 1, skipped: 0, failed: 0 };
-    }
+    issueUrl = await createIssue(octokit, {
+      owner,
+      repo,
+      title: content.title,
+      body: content.body,
+      labels: normalizeLabels(cfg.labels),
+    });
   } catch (err: unknown) {
     core.warning(
-      `Error processing row ${rowNumber}: ${err instanceof Error ? err.message : String(err)}`,
+      `Error creating issue for row ${rowNumber}: ${err instanceof Error ? err.message : String(err)}`,
     );
     return { processed: 1, created: 0, skipped: 0, failed: 1 };
   }
+
+  // クリティカルエラー: 書き戻し失敗時は即時中断のため再throw
+  try {
+    await writeBackToSheet(sheets, {
+      spreadsheetId: cfg.spreadsheetId,
+      sheetName: cfg.sheetName,
+      syncColumnLetter: cfg.syncColumnLetter,
+      rowNumber,
+      value: cfg.syncWriteBackValue,
+    });
+  } catch (updateErr: unknown) {
+    const errorMessage = `CRITICAL: Created issue ${issueUrl} for row ${rowNumber}, but failed to update the spreadsheet. Manual fix is required to prevent duplicate creation.`;
+    core.error(errorMessage);
+    // アクション全体を失敗させるため、エラーを再スロー
+    throw updateErr instanceof Error ? updateErr : new Error(String(updateErr));
+  }
+
+  return { processed: 1, created: 1, skipped: 0, failed: 0, issueUrl };
 }
 
 async function main() {
