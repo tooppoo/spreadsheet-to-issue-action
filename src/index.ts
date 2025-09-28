@@ -51,12 +51,30 @@ function parseLabels(input: string | undefined): string[] | undefined {
           );
           return [];
         });
+      } else {
+        // JSONとしては有効だが配列ではない
+        core.warning(
+          `Labels input was valid JSON but not an array, falling back to CSV. Input: ${trimmed}`,
+        );
       }
     } catch (e) {
       core.warning(
         `Could not parse labels input as JSON array, falling back to CSV. Error: ${e instanceof Error ? e.message : String(e)}`,
       );
       // fallthrough to CSV
+    }
+  }
+  // 入力がオブジェクト風のJSONの場合も、配列ではない旨を警告してCSVにフォールバック
+  else if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+    try {
+      JSON.parse(trimmed);
+      core.warning(
+        `Labels input was valid JSON but not an array, falling back to CSV. Input: ${trimmed}`,
+      );
+    } catch (e) {
+      core.warning(
+        `Could not parse labels input as JSON, falling back to CSV. Error: ${e instanceof Error ? e.message : String(e)}`,
+      );
     }
   }
   return trimmed
