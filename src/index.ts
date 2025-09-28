@@ -101,8 +101,7 @@ function parseA1Start(a1: string): {
 } {
   const trimmed = a1.trim();
   const firstRef = trimmed.split(":")[0]; // e.g. 'C5'
-  const refParts = firstRef.split("!");
-  const ref = refParts[refParts.length - 1];
+  const ref = firstRef;
   // Match the entire ref: optional $ then letters, optional $ then digits
   const m = ref.match(/^\$?([A-Za-z]+)\$?(\d+)?$/);
   if (!m) {
