@@ -35,13 +35,12 @@ function parseLabels(
       const arr = JSON.parse(trimmed);
       if (Array.isArray(arr)) {
         // Preserve label objects if provided; normalize strings
-        const out: LabelInput[] = [];
-        for (const v of arr) {
-          if (typeof v === "string") out.push(v);
-          else if (isLabelObject(v)) out.push({ name: v.name });
-          else out.push(String(v));
-        }
-        return out;
+        return arr.map((v): LabelInput => {
+          if (typeof v === "string") return v;
+          if (isLabelObject(v)) return { name: v.name };
+          return String(v);
+        });
+
       }
     } catch (e) {
       core.warning(
