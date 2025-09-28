@@ -25,8 +25,6 @@ function sleep(ms: number) {
   return new Promise((res) => setTimeout(res, ms));
 }
 
-type LabelInput = string | { name: string };
-
 function isLabelObject(v: unknown): v is { name: string } {
   return (
     !!v &&
@@ -35,7 +33,7 @@ function isLabelObject(v: unknown): v is { name: string } {
   );
 }
 
-function parseLabels(input: string | undefined): LabelInput[] | undefined {
+function parseLabels(input: string | undefined): string[] | undefined {
   if (!input) return undefined;
   const trimmed = input.trim();
   if (!trimmed) return undefined;
@@ -44,10 +42,10 @@ function parseLabels(input: string | undefined): LabelInput[] | undefined {
     try {
       const arr = JSON.parse(trimmed);
       if (Array.isArray(arr)) {
-        // Preserve label objects if provided; normalize strings
-        return arr.flatMap((v): LabelInput[] => {
+        // Convert objects to their name; keep only valid strings
+        return arr.flatMap((v): string[] => {
           if (typeof v === "string") return [v];
-          if (isLabelObject(v)) return [{ name: v.name }];
+          if (isLabelObject(v)) return [v.name];
           core.warning(
             `Invalid label format in JSON array, skipping value: ${JSON.stringify(v)}`,
           );
@@ -65,12 +63,6 @@ function parseLabels(input: string | undefined): LabelInput[] | undefined {
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
-}
-
-function normalizeLabels(
-  labels: LabelInput[] | undefined,
-): string[] | undefined {
-  return labels?.map((l) => (typeof l === "string" ? l : l.name));
 }
 
 function colLetterToIndex(letter: string): number {
@@ -138,7 +130,7 @@ type Config = {
   titleTemplate: string;
   bodyTemplate: string;
   syncColumnLetter: string;
-  labels: LabelInput[] | undefined;
+  labels: string[] | undefined;
   maxIssuesPerRun: number;
   rateLimitDelay: number;
   dryRun: boolean;
@@ -380,7 +372,7 @@ async function processSingleRow(args: {
       repo,
       title: content.title,
       body: content.body,
-      labels: normalizeLabels(cfg.labels),
+      labels: cfg.labels,
     });
   } catch (err: unknown) {
     core.warning(
