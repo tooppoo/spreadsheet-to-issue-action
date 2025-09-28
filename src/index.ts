@@ -16,6 +16,11 @@ type TemplateContext = {
   readonly now: string;
 };
 
+type IssueContent = {
+  title: string;
+  body: string;
+};
+
 function sleep(ms: number) {
   return new Promise((res) => setTimeout(res, ms));
 }
@@ -301,7 +306,7 @@ async function processRows(
   return { processed, created, skipped, failed, createdUrls };
 }
 
-// 1行分の処理を担当
+// 1行分の処理を担当（テンプレートのレンダリング → Issue作成 → シート書き戻し）
 async function processSingleRow(args: {
   cfg: Config;
   now: string;
@@ -339,31 +344,28 @@ async function processSingleRow(args: {
   }
 
   // テンプレートレンダリング
-  const context: TemplateContext = { row: rowMap, rowIndex: rowNumber, now };
-  const title = Mustache.render(cfg.titleTemplate, context);
-  const body = Mustache.render(cfg.bodyTemplate, context);
-  if (title.trim().length === 0) {
+  const content = renderIssueContent(cfg, rowMap, rowNumber, now);
+  if (!content) {
     core.info(`Skipping row ${rowNumber}: empty title after rendering`);
     return { processed: 0, created: 0, skipped: 1, failed: 0 };
   }
 
   try {
     if (!cfg.dryRun) {
-      const createRes = await octokit.rest.issues.create({
+      const issueUrl = await createIssue(octokit, {
         owner,
         repo,
-        title,
-        body,
+        title: content.title,
+        body: content.body,
         labels: normalizeLabels(cfg.labels),
       });
-      const issueUrl = createRes.data.html_url;
-      const targetRange = `${cfg.sheetName}!${cfg.syncColumnLetter}${rowNumber}`;
       try {
-        await sheets.spreadsheets.values.update({
+        await writeBackToSheet(sheets, {
           spreadsheetId: cfg.spreadsheetId,
-          range: targetRange,
-          valueInputOption: "USER_ENTERED",
-          requestBody: { values: [[cfg.syncWriteBackValue]] },
+          sheetName: cfg.sheetName,
+          syncColumnLetter: cfg.syncColumnLetter,
+          rowNumber,
+          value: cfg.syncWriteBackValue,
         });
       } catch (updateErr: unknown) {
         const errorMessage = `CRITICAL: Created issue ${issueUrl} for row ${rowNumber}, but failed to update the spreadsheet. Manual fix is required to prevent duplicate creation.`;
@@ -375,7 +377,7 @@ async function processSingleRow(args: {
       }
       return { processed: 1, created: 1, skipped: 0, failed: 0, issueUrl };
     } else {
-      core.info(`[dry_run] Create issue: ${title}`);
+      core.info(`[dry_run] Create issue: ${content.title}`);
       return { processed: 1, created: 1, skipped: 0, failed: 0 };
     }
   } catch (err: unknown) {
@@ -446,6 +448,61 @@ function columnNumberToLetters(index: number): string {
     n = Math.floor((n - 1) / 26);
   }
   return s;
+}
+
+// Issueのタイトル/本文をテンプレートから生成
+function renderIssueContent(
+  cfg: Config,
+  row: RowMap,
+  rowNumber: number,
+  now: string,
+): IssueContent | null {
+  const context: TemplateContext = { row, rowIndex: rowNumber, now };
+  const title = Mustache.render(cfg.titleTemplate, context);
+  const body = Mustache.render(cfg.bodyTemplate, context);
+  if (title.trim().length === 0) return null;
+  return { title, body };
+}
+
+// GitHub Issue を作成してURLを返す
+async function createIssue(
+  octokit: ReturnType<typeof github.getOctokit>,
+  args: {
+    owner: string;
+    repo: string;
+    title: string;
+    body: string;
+    labels?: string[];
+  },
+): Promise<string> {
+  const res = await octokit.rest.issues.create({
+    owner: args.owner,
+    repo: args.repo,
+    title: args.title,
+    body: args.body,
+    labels: args.labels,
+  });
+  return res.data.html_url;
+}
+
+// シートへ同期待ち済みマークを書き戻す
+async function writeBackToSheet(
+  sheets: sheets_v4.Sheets,
+  args: {
+    spreadsheetId: string;
+    sheetName: string;
+    syncColumnLetter: string;
+    rowNumber: number;
+    value: string;
+  },
+): Promise<void> {
+  const targetRange = `${args.sheetName}!${args.syncColumnLetter}${args.rowNumber}`;
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: args.spreadsheetId,
+    range: targetRange,
+    valueInputOption: "USER_ENTERED",
+    requestBody: { values: [[args.value]] },
+  });
 }
 
 main().catch((err: unknown) => {
