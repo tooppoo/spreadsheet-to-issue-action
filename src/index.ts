@@ -94,6 +94,21 @@ function safeGet<T>(env: NodeJS.ProcessEnv, key: string, def?: T): string | T {
   return v;
 }
 
+// 共通の数値入力パーサー（整数）
+function getIntFromEnv(
+  env: NodeJS.ProcessEnv,
+  key: string,
+  defaultValue: number,
+  onNaN?: (input: string) => number,
+): number {
+  const input = safeGet(env, key, String(defaultValue));
+  const value = parseInt(input, 10);
+  if (Number.isNaN(value)) {
+    return onNaN ? onNaN(String(input)) : defaultValue;
+  }
+  return value;
+}
+
 // Parse the start reference of an A1 range (e.g. 'C5:F' -> { startColIndex: 2, startRowNumber: 5 })
 function parseA1Start(a1: string): {
   startColIndex: number;
@@ -142,9 +157,7 @@ function parseConfig(env: NodeJS.ProcessEnv): Config {
   const spreadsheetId = safeGet(env, "SPREADSHEET_ID");
   const sheetName = safeGet(env, "SHEET_NAME");
   const readRange = safeGet(env, "READ_RANGE", "A:Z");
-  const dataStartRowInput = safeGet(env, "DATA_START_ROW", "2");
-  let dataStartRow = parseInt(dataStartRowInput, 10);
-  if (Number.isNaN(dataStartRow)) dataStartRow = 2;
+  const dataStartRow = getIntFromEnv(env, "DATA_START_ROW", 2, () => 2);
   if (dataStartRow < 1) {
     throw new Error(
       `data_start_row must be a positive integer, but got ${dataStartRow}.`,
@@ -171,22 +184,28 @@ function parseConfig(env: NodeJS.ProcessEnv): Config {
   const syncColumnLetter = safeGet(env, "SYNC_COLUMN");
   const labelsInput = safeGet(env, "LABELS", "");
   const labels = parseLabels(labelsInput);
-  const maxIssuesPerRunInput = safeGet(env, "MAX_ISSUES_PER_RUN", "10");
-  let maxIssuesPerRun = parseInt(maxIssuesPerRunInput, 10);
-  if (Number.isNaN(maxIssuesPerRun)) {
-    core.warning(
-      `Invalid 'max_issues_per_run' input: '${maxIssuesPerRunInput}'. Treating as unlimited.`,
-    );
-    maxIssuesPerRun = 0;
-  }
-  const rateLimitDelayInput = safeGet(env, "RATE_LIMIT_DELAY", "1000");
-  let rateLimitDelay = parseInt(rateLimitDelayInput, 10);
-  if (Number.isNaN(rateLimitDelay)) {
-    core.warning(
-      `Invalid 'rate_limit_delay' input: '${rateLimitDelayInput}'. Using default 1000ms.`,
-    );
-    rateLimitDelay = 1000;
-  }
+  const maxIssuesPerRun = getIntFromEnv(
+    env,
+    "MAX_ISSUES_PER_RUN",
+    10,
+    (input) => {
+      core.warning(
+        `Invalid 'max_issues_per_run' input: '${input}'. Treating as unlimited.`,
+      );
+      return 0; // 無制限を表す扱い（cfg.maxIssuesPerRun > 0 で判断）
+    },
+  );
+  const rateLimitDelay = getIntFromEnv(
+    env,
+    "RATE_LIMIT_DELAY",
+    1000,
+    (input) => {
+      core.warning(
+        `Invalid 'rate_limit_delay' input: '${input}'. Using default 1000ms.`,
+      );
+      return 1000;
+    },
+  );
   const dryRun = safeGet(env, "DRY_RUN", "false").toLowerCase() === "true";
   const githubToken = safeGet(env, "GITHUB_TOKEN");
   const syncWriteBackValue = safeGet(env, "SYNC_WRITE_BACK_VALUE", "TRUE");
