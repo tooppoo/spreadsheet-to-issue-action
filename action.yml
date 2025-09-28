@@ -1,6 +1,6 @@
 name: "Spreadsheet to Issue Action"
 description: "GoogleスプレッドシートからGitHub Issueを自動作成するComposite Action"
-author: "tooppoo"
+author: "philomagi"
 
 inputs:
   github_token:
@@ -112,7 +112,7 @@ runs:
         DATA_START_ROW: ${{ inputs.data_start_row }}
         BOOLEAN_TRUTHY_VALUES: ${{ inputs.boolean_truthy_values }}
         DRY_RUN: ${{ inputs.dry_run }}
-        # Inherit Google access token from caller's OIDC step
-        GOOGLE_OAUTH_ACCESS_TOKEN: ${{ env.GOOGLE_OAUTH_ACCESS_TOKEN }}
+  # Use Google access token provided by the caller's OIDC step
+  GOOGLE_OAUTH_ACCESS_TOKEN: ${{ env.GOOGLE_OAUTH_ACCESS_TOKEN }}
         # Fallback: also respects ACCESS_TOKEN if provided in the runner env
         ACCESS_TOKEN: ${{ env.ACCESS_TOKEN }}
