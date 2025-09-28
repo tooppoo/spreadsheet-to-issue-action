@@ -25,7 +25,7 @@ function sleep(ms: number) {
   return new Promise((res) => setTimeout(res, ms));
 }
 
-type LabelInput = string | { name: string; [k: string]: unknown };
+type LabelInput = string | { name: string };
 
 function isLabelObject(v: unknown): v is { name: string } {
   return (
