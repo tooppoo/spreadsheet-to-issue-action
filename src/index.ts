@@ -29,20 +29,26 @@ function parseLabels(
   if (!input) return undefined;
   const trimmed = input.trim();
   if (!trimmed) return undefined;
-  try {
-    const arr = JSON.parse(trimmed);
-    if (Array.isArray(arr)) {
-      // Preserve label objects if provided; normalize strings
-      const out: LabelInput[] = [];
-      for (const v of arr) {
-        if (typeof v === "string") out.push(v);
-        else if (isLabelObject(v)) out.push({ name: v.name });
-        else out.push(String(v));
+  // Try JSON parse only when the input looks like a JSON array
+  if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+    try {
+      const arr = JSON.parse(trimmed);
+      if (Array.isArray(arr)) {
+        // Preserve label objects if provided; normalize strings
+        const out: LabelInput[] = [];
+        for (const v of arr) {
+          if (typeof v === "string") out.push(v);
+          else if (isLabelObject(v)) out.push({ name: v.name });
+          else out.push(String(v));
+        }
+        return out;
       }
-      return out;
+    } catch (e) {
+      core.warning(
+        `Could not parse labels input as JSON array, falling back to CSV. Error: ${e instanceof Error ? e.message : String(e)}`,
+      );
+      // fallthrough to CSV
     }
-  } catch (_) {
-    // fallthrough to CSV
   }
   return trimmed
     .split(",")
@@ -245,65 +251,95 @@ async function processRows(
       continue;
     }
 
-    const rowMap: RowMap = {};
-    for (let c = 0; c < rowValues.length; c++) {
-      const letter = columnNumberToLetters(startColIndex + c);
-      rowMap[letter] = String(rowValues[c] ?? "");
-    }
-
     const rowNumber = startRowNumber + i;
-  const context: TemplateContext = { row: rowMap, rowIndex: rowNumber, now };
-    const title = Mustache.render(cfg.titleTemplate, context);
-    const body = Mustache.render(cfg.bodyTemplate, context);
-    if (title.trim().length === 0) {
-      skipped++;
-      core.info(`Skipping row ${rowNumber}: empty title after rendering`);
-      continue;
-    }
-
-    try {
-      processed++;
-      if (!cfg.dryRun) {
-        const createRes = await octokit.rest.issues.create({
-          owner,
-          repo,
-          title,
-          body,
-          // Normalize to string[] for REST API
-          labels: normalizeLabels(cfg.labels),
-        });
-        const issueUrl = createRes.data.html_url;
-        if (createdUrls.length < 100) createdUrls.push(issueUrl);
-        const targetRange = `${cfg.sheetName}!${cfg.syncColumnLetter}${rowNumber}`;
-        try {
-          await sheets.spreadsheets.values.update({
-            spreadsheetId: cfg.spreadsheetId,
-            range: targetRange,
-            valueInputOption: "USER_ENTERED",
-            requestBody: { values: [[cfg.syncWriteBackValue]] },
-          });
-        } catch (updateErr: unknown) {
-          const errorMessage = `CRITICAL: Created issue ${issueUrl} for row ${rowNumber}, but failed to update the spreadsheet. Manual fix is required to prevent duplicate creation.`;
-          core.error(errorMessage);
-          core.setFailed(updateErr instanceof Error ? updateErr : String(updateErr));
-          return { processed, created, skipped, failed, createdUrls };
-        }
-        created++;
-      } else {
-        core.info(`[dry_run] Create issue: ${title}`);
-        created++;
-      }
-    } catch (err: unknown) {
-      failed++;
-      core.warning(
-        `Error processing row ${rowNumber}: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
+    const result = await processSingleRow({
+      cfg,
+      now,
+      owner,
+      repo,
+      sheets,
+      octokit,
+      rowValues,
+      startColIndex,
+      rowNumber,
+    });
+    processed += result.processed;
+    created += result.created;
+    skipped += result.skipped;
+    failed += result.failed;
+    if (result.issueUrl && createdUrls.length < 100) createdUrls.push(result.issueUrl);
 
     if (cfg.rateLimitDelay > 0) await sleep(cfg.rateLimitDelay);
   }
 
   return { processed, created, skipped, failed, createdUrls };
+}
+
+// 1行分の処理を担当
+async function processSingleRow(args: {
+  cfg: Config;
+  now: string;
+  owner: string;
+  repo: string;
+  sheets: sheets_v4.Sheets;
+  octokit: ReturnType<typeof github.getOctokit>;
+  rowValues: unknown[];
+  startColIndex: number;
+  rowNumber: number;
+}): Promise<{ processed: number; created: number; skipped: number; failed: number; issueUrl?: string }> {
+  const { cfg, now, owner, repo, sheets, octokit, rowValues, startColIndex, rowNumber } = args;
+
+  // 行マップを生成
+  const rowMap: RowMap = {};
+  for (let c = 0; c < rowValues.length; c++) {
+    const letter = columnNumberToLetters(startColIndex + c);
+    rowMap[letter] = String(rowValues[c] ?? "");
+  }
+
+  // テンプレートレンダリング
+  const context: TemplateContext = { row: rowMap, rowIndex: rowNumber, now };
+  const title = Mustache.render(cfg.titleTemplate, context);
+  const body = Mustache.render(cfg.bodyTemplate, context);
+  if (title.trim().length === 0) {
+    core.info(`Skipping row ${rowNumber}: empty title after rendering`);
+    return { processed: 0, created: 0, skipped: 1, failed: 0 };
+  }
+
+  try {
+    if (!cfg.dryRun) {
+      const createRes = await octokit.rest.issues.create({
+        owner,
+        repo,
+        title,
+        body,
+        labels: normalizeLabels(cfg.labels),
+      });
+      const issueUrl = createRes.data.html_url;
+      const targetRange = `${cfg.sheetName}!${cfg.syncColumnLetter}${rowNumber}`;
+      try {
+        await sheets.spreadsheets.values.update({
+          spreadsheetId: cfg.spreadsheetId,
+          range: targetRange,
+          valueInputOption: "USER_ENTERED",
+          requestBody: { values: [[cfg.syncWriteBackValue]] },
+        });
+      } catch (updateErr: unknown) {
+        const errorMessage = `CRITICAL: Created issue ${issueUrl} for row ${rowNumber}, but failed to update the spreadsheet. Manual fix is required to prevent duplicate creation.`;
+        core.error(errorMessage);
+        core.setFailed(updateErr instanceof Error ? updateErr : String(updateErr));
+        return { processed: 1, created: 0, skipped: 0, failed: 1 };
+      }
+      return { processed: 1, created: 1, skipped: 0, failed: 0, issueUrl };
+    } else {
+      core.info(`[dry_run] Create issue: ${title}`);
+      return { processed: 1, created: 1, skipped: 0, failed: 0 };
+    }
+  } catch (err: unknown) {
+    core.warning(
+      `Error processing row ${rowNumber}: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    return { processed: 1, created: 0, skipped: 0, failed: 1 };
+  }
 }
 
 async function main() {
