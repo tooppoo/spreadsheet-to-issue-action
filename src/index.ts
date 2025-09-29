@@ -261,6 +261,7 @@ type ProcessResult = {
   created: number;
   skipped: number;
   failed: number;
+  planned: number;
   createdUrls: string[];
 };
 
@@ -277,6 +278,7 @@ async function processRows(
   let created = 0;
   let skipped = 0;
   let failed = 0;
+  let planned = 0;
   const createdUrls: string[] = [];
   const { owner, repo } = github.context.repo;
   const syncColIndex = colLetterToIndex(cfg.syncColumnLetter);
@@ -286,7 +288,8 @@ async function processRows(
 
   let warnedSyncOutOfRange = false;
   for (let i = startRowIndex; i < values.length; i++) {
-    if (created >= limit) {
+    const countForLimit = cfg.dryRun ? planned : created;
+    if (countForLimit >= limit) {
       core.info(`Reached max_issues_per_run (${limit}); stopping early`);
       break;
     }
@@ -325,13 +328,14 @@ async function processRows(
     created += result.created;
     skipped += result.skipped;
     failed += result.failed;
+    planned += result.planned;
     if (result.issueUrl && createdUrls.length < MAX_URLS_IN_SUMMARY)
       createdUrls.push(result.issueUrl);
 
     if (cfg.rateLimitDelay > 0) await sleep(cfg.rateLimitDelay);
   }
 
-  return { processed, created, skipped, failed, createdUrls };
+  return { processed, created, skipped, failed, planned, createdUrls };
 }
 
 // 1行分の処理を担当（テンプレートのレンダリング → Issue作成 → シート書き戻し）
@@ -350,6 +354,7 @@ async function processSingleRow(args: {
   created: number;
   skipped: number;
   failed: number;
+  planned: number;
   issueUrl?: string;
 }> {
   const {
@@ -375,12 +380,12 @@ async function processSingleRow(args: {
   const content = renderIssueContent(cfg, rowMap, rowNumber, now);
   if (!content) {
     core.info(`Skipping row ${rowNumber}: empty title after rendering`);
-    return { processed: 0, created: 0, skipped: 1, failed: 0 };
+    return { processed: 0, created: 0, skipped: 1, failed: 0, planned: 0 };
   }
 
   if (cfg.dryRun) {
     core.info(`[dry_run] Create issue: ${content.title}`);
-    return { processed: 1, created: 1, skipped: 0, failed: 0 };
+    return { processed: 1, created: 0, skipped: 0, failed: 0, planned: 1 };
   }
 
   // 行単位で復旧可能なエラー: Issue 作成失敗のみ捕捉して継続
@@ -397,7 +402,7 @@ async function processSingleRow(args: {
     core.warning(
       `Error creating issue for row ${rowNumber}: ${err instanceof Error ? err.message : String(err)}`,
     );
-    return { processed: 1, created: 0, skipped: 0, failed: 1 };
+    return { processed: 1, created: 0, skipped: 0, failed: 1, planned: 0 };
   }
 
   // クリティカルエラー: 書き戻し失敗時は即時中断のため再throw
@@ -416,7 +421,7 @@ async function processSingleRow(args: {
     throw updateErr instanceof Error ? updateErr : new Error(String(updateErr));
   }
 
-  return { processed: 1, created: 1, skipped: 0, failed: 0, issueUrl };
+  return { processed: 1, created: 1, skipped: 0, failed: 0, planned: 0, issueUrl };
 }
 
 async function main() {
@@ -440,7 +445,7 @@ async function main() {
   const { startColIndex, startRowNumber } = parseA1Start(cfg.readRange);
   const octokit = github.getOctokit(cfg.githubToken);
 
-  const { processed, created, skipped, failed, createdUrls } =
+  const { processed, created, skipped, failed, planned, createdUrls } =
     await processRows(
       cfg,
       values,
@@ -455,6 +460,7 @@ async function main() {
     `Created: ${created}`,
     `Skipped: ${skipped}`,
     `Failed: ${failed}`,
+    `Planned: ${planned}`,
     "",
     ...createdUrls.map((u) => `- ${u}`),
   ].join("\n");
@@ -463,6 +469,7 @@ async function main() {
   core.setOutput("created_count", String(created));
   core.setOutput("skipped_count", String(skipped));
   core.setOutput("failed_count", String(failed));
+  core.setOutput("planned_count", String(planned));
   core.setOutput("created_issue_urls", JSON.stringify(createdUrls));
   core.setOutput("summary_markdown", summary);
 

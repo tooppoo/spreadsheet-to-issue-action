@@ -8,8 +8,9 @@
 
 ### クイックスタート（推奨）
 
+| `planned_count` | dry_run 時など実際の作成前に予定された件数 |
 1) リポジトリに必要なSecretsを用意
-- `GOOGLE_WORKLOAD_IDENTITY_PROVIDER`
+| `summary_markdown` | 集計（`Processed/Created/Skipped/Failed/Planned`）とURL一覧のサマリーMarkdown |
 - `GOOGLE_SERVICE_ACCOUNT`
 - `SPREADSHEET_ID`
 
@@ -65,6 +66,7 @@ Googleスプレッドシートを読み取り、未連携行に対してGitHub I
 - 成功時に `sync_column` のセルへ書き戻し値（既定: TRUE）を設定
 - `max_issues_per_run` と `rate_limit_delay` でレート制御
 - 途中失敗は継続し、集計値とURL一覧を出力
+- dry_run モードでは Issue を作成しない代わりに `planned_count` が増加します
 
 ### テンプレートで利用可能な変数
 
@@ -99,8 +101,9 @@ Googleスプレッドシートを読み取り、未連携行に対してGitHub I
 | `created_count` | 作成件数 |
 | `skipped_count` | スキップ件数 |
 | `failed_count` | 失敗件数 |
+| `planned_count` | dry_run 時など実際の作成前に予定された件数 |
 | `created_issue_urls` | 作成IssueのURL配列（JSON）。サマリー掲載は最大100件 |
-| `summary_markdown` | 集計とURL一覧のサマリーMarkdown |
+| `summary_markdown` | 集計（`Processed/Created/Skipped/Failed/Planned`）とURL一覧のサマリーMarkdown |
 
 ## ワークフロー例
 
