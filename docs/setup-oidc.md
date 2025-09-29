@@ -14,12 +14,13 @@
 
 2) サービスアカウント作成
 - IAM & Admin > Service Accounts > Create
-- 名前は任意。ロールは不要（後で権限はスプレッドシート側の共有で付与）
+- 名前は任意。 `iam.serviceAccounts.getAccessToken` 権限を持つロールを割り当てる
 
 3) Workload Identity Federation（WIF）を設定
 - IAM & Admin > Workload Identity Federation > Pool作成
-- ProviderはGitHubを選択 or OIDC Providerを作成し、対象のリポジトリ/Orgに制限
-- サービスアカウント（SA）に対して、作成したProviderからの偽装（impersonation）ができるよう関連付け
+- ProviderはOIDC Providerを作成し、発行元に <https://token.actions.githubusercontent.com> を指定
+- Providerの属性条件を設定して、対象のリポジトリ/Orgに制限
+- サービスアカウントに対して、作成したProviderを関連付け
 
 4) 対象スプレッドシートをサービスアカウントに共有
 - スプレッドシートを開き、共有でサービスアカウントのメールを「編集者」として追加
