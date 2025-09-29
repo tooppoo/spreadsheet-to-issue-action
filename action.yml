@@ -1,5 +1,5 @@
 name: "Spreadsheet to Issue Action"
-description: "GoogleスプレッドシートからGitHub Issueを自動作成するComposite Action"
+description: "GoogleスプレッドシートからGitHub Issueを自動作成する JavaScript Action"
 author: "philomagi"
 
 inputs:
@@ -57,49 +57,16 @@ inputs:
 outputs:
   processed_count:
     description: "処理行数"
-    value: ${{ steps.run.outputs.processed_count }}
   created_count:
     description: "作成件数"
-    value: ${{ steps.run.outputs.created_count }}
   skipped_count:
     description: "スキップ件数"
-    value: ${{ steps.run.outputs.skipped_count }}
   failed_count:
     description: "失敗件数"
-    value: ${{ steps.run.outputs.failed_count }}
   created_issue_urls:
     description: "作成IssueのURL配列（最大100件）"
-    value: ${{ steps.run.outputs.created_issue_urls }}
   summary_markdown:
     description: "集計とURL一覧のサマリーMarkdown"
-    value: ${{ steps.run.outputs.summary_markdown }}
-
 runs:
-  using: "composite"
-  steps:
-  # Node.jsやpnpmのセットアップ、依存インストール、ビルドは不要
-  # dist/index.js は ncc により依存関係込みでバンドル済み
-    - id: run
-      name: Run sync script
-      run: node dist/index.js
-      shell: bash
-      env:
-        # Inputs
-        GITHUB_TOKEN: ${{ inputs.github_token }}
-        SPREADSHEET_ID: ${{ inputs.spreadsheet_id }}
-        SHEET_NAME: ${{ inputs.sheet_name }}
-        TITLE_TEMPLATE: ${{ inputs.title_template }}
-        BODY_TEMPLATE: ${{ inputs.body_template }}
-        LABELS: ${{ inputs.labels }}
-        MAX_ISSUES_PER_RUN: ${{ inputs.max_issues_per_run }}
-        RATE_LIMIT_DELAY: ${{ inputs.rate_limit_delay }}
-        SYNC_COLUMN: ${{ inputs.sync_column }}
-        SYNC_WRITE_BACK_VALUE: ${{ inputs.sync_write_back_value }}
-        READ_RANGE: ${{ inputs.read_range }}
-        DATA_START_ROW: ${{ inputs.data_start_row }}
-        BOOLEAN_TRUTHY_VALUES: ${{ inputs.boolean_truthy_values }}
-        DRY_RUN: ${{ inputs.dry_run }}
-        # Use Google access token provided by the caller's OIDC step
-        GOOGLE_OAUTH_ACCESS_TOKEN: ${{ env.GOOGLE_OAUTH_ACCESS_TOKEN }}
-        # Fallback: also respects ACCESS_TOKEN if provided in the runner env
-        ACCESS_TOKEN: ${{ env.ACCESS_TOKEN }}
+  using: node20
+  main: dist/index.js

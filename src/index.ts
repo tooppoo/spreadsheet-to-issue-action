@@ -94,24 +94,27 @@ function colLetterToIndex(letter: string): number {
   return result - 1;
 }
 
-function safeGet(env: NodeJS.ProcessEnv, key: string): string;
-function safeGet<T>(env: NodeJS.ProcessEnv, key: string, def: T): T | string;
-function safeGet<T>(env: NodeJS.ProcessEnv, key: string, def?: T): string | T {
-  const v = env[key];
-  if (v === undefined || v === "") {
-    return def === undefined ? "" : def;
+function getInputRequired(name: string, pretty?: string): string {
+  const v = core.getInput(name, { required: false }).trim();
+  if (!v) {
+    throw new Error(`Required input '${pretty ?? name}' is missing.`);
   }
   return v;
 }
 
+function getInputOptional(name: string, def?: string): string {
+  const v = core.getInput(name, { required: false });
+  if (v === undefined || v === "") return def ?? "";
+  return v;
+}
+
 // 共通の数値入力パーサー（整数）
-function getIntFromEnv(
-  env: NodeJS.ProcessEnv,
-  key: string,
+function getIntFromInput(
+  name: string,
   defaultValue: number,
   onNaN?: (input: string) => number,
 ): number {
-  const input = safeGet(env, key, String(defaultValue));
+  const input = getInputOptional(name, String(defaultValue));
   const value = parseInt(input, 10);
   if (Number.isNaN(value)) {
     return onNaN ? onNaN(String(input)) : defaultValue;
@@ -164,18 +167,18 @@ function parseConfig(env: NodeJS.ProcessEnv): Config {
     );
   }
 
-  const spreadsheetId = safeGet(env, "SPREADSHEET_ID");
-  const sheetName = safeGet(env, "SHEET_NAME");
-  const readRange = safeGet(env, "READ_RANGE", "A:Z");
-  const dataStartRow = getIntFromEnv(env, "DATA_START_ROW", 2, () => 2);
+  // Inputs are taken via @actions/core.getInput
+  const spreadsheetId = getInputRequired("spreadsheet_id", "spreadsheet_id");
+  const sheetName = getInputRequired("sheet_name", "sheet_name");
+  const readRange = getInputOptional("read_range", "A:Z");
+  const dataStartRow = getIntFromInput("data_start_row", 2, () => 2);
   if (dataStartRow < 1) {
     throw new Error(
       `data_start_row must be a positive integer, but got ${dataStartRow}.`,
     );
   }
-  const truthyJson = safeGet(
-    env,
-    "BOOLEAN_TRUTHY_VALUES",
+  const truthyJson = getInputOptional(
+    "boolean_truthy_values",
     '["TRUE","true","True","1","はい","済"]',
   );
   let truthyValues: string[];
@@ -189,14 +192,13 @@ function parseConfig(env: NodeJS.ProcessEnv): Config {
     );
   }
 
-  const titleTemplate = safeGet(env, "TITLE_TEMPLATE");
-  const bodyTemplate = safeGet(env, "BODY_TEMPLATE");
-  const syncColumnLetter = safeGet(env, "SYNC_COLUMN");
-  const labelsInput = safeGet(env, "LABELS", "");
+  const titleTemplate = getInputRequired("title_template", "title_template");
+  const bodyTemplate = getInputRequired("body_template", "body_template");
+  const syncColumnLetter = getInputRequired("sync_column", "sync_column");
+  const labelsInput = getInputOptional("labels", "");
   const labels = parseLabels(labelsInput);
-  const maxIssuesPerRun = getIntFromEnv(
-    env,
-    "MAX_ISSUES_PER_RUN",
+  const maxIssuesPerRun = getIntFromInput(
+    "max_issues_per_run",
     10,
     (input) => {
       core.warning(
@@ -205,9 +207,8 @@ function parseConfig(env: NodeJS.ProcessEnv): Config {
       return 0; // 無制限を表す扱い（cfg.maxIssuesPerRun > 0 で判断）
     },
   );
-  const rateLimitDelay = getIntFromEnv(
-    env,
-    "RATE_LIMIT_DELAY",
+  const rateLimitDelay = getIntFromInput(
+    "rate_limit_delay",
     1000,
     (input) => {
       core.warning(
@@ -216,9 +217,9 @@ function parseConfig(env: NodeJS.ProcessEnv): Config {
       return 1000;
     },
   );
-  const dryRun = safeGet(env, "DRY_RUN", "false").toLowerCase() === "true";
-  const githubToken = safeGet(env, "GITHUB_TOKEN");
-  const syncWriteBackValue = safeGet(env, "SYNC_WRITE_BACK_VALUE", "TRUE");
+  const dryRun = getInputOptional("dry_run", "false").toLowerCase() === "true";
+  const githubToken = getInputRequired("github_token", "github_token");
+  const syncWriteBackValue = getInputOptional("sync_write_back_value", "TRUE");
 
   // 必須入力を一括検証して不足分をまとめて通知
   const requiredInputs: Record<string, string | undefined> = {
